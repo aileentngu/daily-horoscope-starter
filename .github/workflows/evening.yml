@@ -1,17 +1,17 @@
-name: Send daily astrology reading
+name: Evening next-day astrology message
 
 on:
   workflow_dispatch:
 
   schedule:
-    - cron: "30 7 * * *"
+    - cron: "00 21 * * *"
       timezone: "Australia/Melbourne"
 
 permissions:
   contents: read
 
 jobs:
-  send-reading:
+  send-evening-reading:
     runs-on: ubuntu-latest
     timeout-minutes: 5
 
@@ -28,8 +28,10 @@ jobs:
       - name: Install packages
         run: python -m pip install -r requirements.txt
 
-      - name: Generate and send reading
+      - name: Generate and send tomorrow's reading
         env:
+          READING_MODE: evening
+
           FREEASTRO_API_KEY: ${{ secrets.FREEASTRO_API_KEY }}
 
           BIRTH_YEAR: ${{ secrets.BIRTH_YEAR }}

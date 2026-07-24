@@ -2,7 +2,8 @@ import json
 import os
 import re
 import sys
-from datetime import datetime
+import time
+from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -33,44 +34,52 @@ FREEASTRO_ENDPOINT = (
     "https://api.freeastroapi.com/api/v3/horoscope/daily/personal"
 )
 
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 MELBOURNE_TIMEZONE = "Australia/Melbourne"
-MAX_ASTROLOGY_JSON_CHARACTERS = 45_000
+DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+
+MAX_ASTROLOGY_JSON_CHARACTERS = 50_000
+MAX_TELEGRAM_CHARACTERS = 3_800
 
 DEFAULT_PERSONAL_CONTEXT = """
-The recipient is a fourth-year mechatronics engineering student in Melbourne.
-They are balancing university coursework, a final-year project, internship and
-graduate applications, technical skill development, part-time work, finances,
-friendships, family, relationships and their general health and routine.
+The recipient is a girl who is a fourth-year mechatronics engineering student in Melbourne.
 
-They are ambitious and want practical guidance about where to direct their
-attention, when to act, when to wait, how to communicate and what mistakes to
-avoid. Mention only the parts of their life that are genuinely supported by the
-astrological information supplied.
+They are balancing university coursework, a final-year project, internship applications, 
+technical skill development, finances, confidence, diet, exercise, sleep,
+friendships, family, being single and wanting relationships, health and their general routine.
+
+They are ambitious and respond best to direct, practical guidance. They want
+to know where to direct their attention, what action to take, when to wait,
+how to communicate and what mistakes to avoid.
+
+They are trying to be more girly and feminine while also being able to be assertive and confident in studies and work.
+They are also trying to physically glow-up.
+
+Only connect the astrology to areas of their life genuinely supported by the
+astrological source. Do not force every part of their life into each reading.
 """.strip()
 
 load_dotenv(ENV_FILE)
 
 
 # ---------------------------------------------------------
-# SETTINGS AND VALIDATION
+# ENVIRONMENT SETTINGS
 # ---------------------------------------------------------
 
 def required_setting(name: str) -> str:
-    """Return a required value from the .env file."""
+    """Return a required environment setting."""
 
     value = os.getenv(name, "").strip()
 
     if not value:
         raise RuntimeError(
-            f"Missing {name}. Open the .env file and add a value for it."
+            f"Missing {name}. Add it to your .env file or GitHub Secrets."
         )
 
     return value
 
 
 def optional_setting(name: str, default: str = "") -> str:
-    """Return an optional value from the .env file."""
+    """Return an optional environment setting."""
 
     value = os.getenv(name, "").strip()
     return value if value else default
@@ -81,7 +90,7 @@ def integer_setting(
     minimum: int,
     maximum: int,
 ) -> int:
-    """Read and validate an integer setting."""
+    """Read and validate a whole-number setting."""
 
     raw_value = required_setting(name)
 
@@ -90,7 +99,7 @@ def integer_setting(
 
     except ValueError as error:
         raise RuntimeError(
-            f"{name} must be a whole number, but received: {raw_value}"
+            f"{name} must be a whole number. Received: {raw_value}"
         ) from error
 
     if not minimum <= value <= maximum:
@@ -102,7 +111,7 @@ def integer_setting(
 
 
 def boolean_setting(name: str, default: bool) -> bool:
-    """Read a true/false setting from the .env file."""
+    """Read a true-or-false environment setting."""
 
     raw_value = os.getenv(name, "").strip().casefold()
 
@@ -116,8 +125,24 @@ def boolean_setting(name: str, default: bool) -> bool:
         return False
 
     raise RuntimeError(
-        f"{name} must be true or false, but received: {raw_value}"
+        f"{name} must be true or false. Received: {raw_value}"
     )
+
+
+def reading_mode() -> str:
+    """Return either morning or evening."""
+
+    mode = optional_setting(
+        "READING_MODE",
+        "morning",
+    ).casefold()
+
+    if mode not in {"morning", "evening"}:
+        raise RuntimeError(
+            "READING_MODE must be either morning or evening."
+        )
+
+    return mode
 
 
 # ---------------------------------------------------------
@@ -128,58 +153,104 @@ def melbourne_now() -> datetime:
     """Return the current Melbourne date and time."""
 
     try:
-        return datetime.now(ZoneInfo(MELBOURNE_TIMEZONE))
+        return datetime.now(
+            ZoneInfo(MELBOURNE_TIMEZONE)
+        )
 
     except ZoneInfoNotFoundError:
         print(
             "WARNING: Australia/Melbourne could not be loaded. "
-            "Using the computer's local time instead.",
+            "Using the computer's local time.",
             file=sys.stderr,
         )
 
         return datetime.now().astimezone()
 
 
-def formatted_date(now: datetime) -> str:
-    """Format the date without a leading zero."""
+def formatted_date(value: datetime) -> str:
+    """Format a date without a leading zero."""
 
     return (
-        f"{now.strftime('%A')}, "
-        f"{now.day} "
-        f"{now.strftime('%B %Y')}"
+        f"{value.strftime('%A')}, "
+        f"{value.day} "
+        f"{value.strftime('%B %Y')}"
     )
 
 
+def determine_target_date(
+    mode: str,
+    now: datetime,
+) -> datetime:
+    """
+    Morning mode reads today.
+
+    Evening mode reads tomorrow.
+    """
+
+    if mode == "evening":
+        return now + timedelta(days=1)
+
+    return now
+
+
 # ---------------------------------------------------------
-# FREEASTROAPI REQUEST
+# BIRTH DETAILS
 # ---------------------------------------------------------
 
 def build_birth_details() -> dict:
-    """Build the birth-data object required by FreeAstroAPI."""
+    """Build the birth-information object sent to FreeAstroAPI."""
 
-    time_known = boolean_setting(
-        "BIRTH_TIME_KNOWN",
-        default=True,
-    )
-
-    birth = {
-        "year": integer_setting("BIRTH_YEAR", 1800, 2200),
-        "month": integer_setting("BIRTH_MONTH", 1, 12),
-        "day": integer_setting("BIRTH_DAY", 1, 31),
-        "hour": integer_setting("BIRTH_HOUR", 0, 23),
-        "minute": integer_setting("BIRTH_MINUTE", 0, 59),
-        "city": required_setting("BIRTH_CITY"),
-        "tz_str": required_setting("BIRTH_TIMEZONE"),
-        "time_known": time_known,
+    return {
+        "year": integer_setting(
+            "BIRTH_YEAR",
+            1800,
+            2200,
+        ),
+        "month": integer_setting(
+            "BIRTH_MONTH",
+            1,
+            12,
+        ),
+        "day": integer_setting(
+            "BIRTH_DAY",
+            1,
+            31,
+        ),
+        "hour": integer_setting(
+            "BIRTH_HOUR",
+            0,
+            23,
+        ),
+        "minute": integer_setting(
+            "BIRTH_MINUTE",
+            0,
+            59,
+        ),
+        "city": required_setting(
+            "BIRTH_CITY"
+        ),
+        "tz_str": required_setting(
+            "BIRTH_TIMEZONE"
+        ),
+        "time_known": boolean_setting(
+            "BIRTH_TIME_KNOWN",
+            default=True,
+        ),
     }
 
-    return birth
 
+# ---------------------------------------------------------
+# FREEASTROAPI
+# ---------------------------------------------------------
 
-def fetch_personal_horoscope(target_date: str) -> dict:
-    """Retrieve the personalised daily horoscope from FreeAstroAPI."""
+def fetch_personal_horoscope(
+    target_date: str,
+) -> dict:
+    """Request the personalised horoscope for a specified date."""
 
-    api_key = required_setting("FREEASTRO_API_KEY")
+    api_key = required_setting(
+        "FREEASTRO_API_KEY"
+    )
 
     payload = {
         "birth": build_birth_details(),
@@ -188,76 +259,102 @@ def fetch_personal_horoscope(target_date: str) -> dict:
         "include_interpretation_blocks": True,
     }
 
-    try:
-        response = requests.post(
-            FREEASTRO_ENDPOINT,
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key,
-            },
-            json=payload,
-            timeout=90,
-        )
+    last_error: Exception | None = None
 
-    except requests.RequestException as error:
-        raise RuntimeError(
-            "FreeAstroAPI could not be reached. "
-            "Check your internet connection."
-        ) from error
+    for attempt in range(1, 4):
+        try:
+            response = requests.post(
+                FREEASTRO_ENDPOINT,
+                headers={
+                    "Content-Type": "application/json",
+                    "x-api-key": api_key,
+                },
+                json=payload,
+                timeout=90,
+            )
 
-    if response.status_code in {401, 403}:
-        raise RuntimeError(
-            "FreeAstroAPI rejected the API key. "
-            "Check FREEASTRO_API_KEY."
-        )
+        except requests.RequestException as error:
+            last_error = error
 
-    if response.status_code == 429:
-        raise RuntimeError(
-            "FreeAstroAPI's request limit has been reached for today."
-        )
+            if attempt < 3:
+                time.sleep(5)
+                continue
 
-    if not response.ok:
-        response_preview = response.text[:500].replace("\n", " ")
+            raise RuntimeError(
+                "FreeAstroAPI could not be reached after three attempts."
+            ) from error
 
-        raise RuntimeError(
-            "FreeAstroAPI returned "
-            f"HTTP {response.status_code}: {response_preview}"
-        )
+        if response.status_code in {401, 403}:
+            raise RuntimeError(
+                "FreeAstroAPI rejected FREEASTRO_API_KEY."
+            )
 
-    try:
-        result = response.json()
+        if response.status_code == 429:
+            raise RuntimeError(
+                "The FreeAstroAPI request allowance has been reached."
+            )
 
-    except ValueError as error:
-        raise RuntimeError(
-            "FreeAstroAPI returned a response that was not valid JSON."
-        ) from error
+        if response.status_code >= 500 and attempt < 3:
+            time.sleep(5)
+            continue
 
-    data = result.get("data")
+        if not response.ok:
+            preview = response.text[:700].replace(
+                "\n",
+                " ",
+            )
 
-    if not isinstance(data, dict):
-        raise RuntimeError(
-            "FreeAstroAPI did not return the expected horoscope data."
-        )
+            raise RuntimeError(
+                f"FreeAstroAPI returned HTTP "
+                f"{response.status_code}: {preview}"
+            )
 
-    returned_date = str(data.get("date", "")).strip()
+        try:
+            result = response.json()
 
-    if returned_date and returned_date != target_date:
-        raise RuntimeError(
-            "FreeAstroAPI returned the wrong date. "
-            f"Requested {target_date}, received {returned_date}."
-        )
+        except ValueError as error:
+            raise RuntimeError(
+                "FreeAstroAPI returned invalid JSON."
+            ) from error
 
-    return result
+        data = result.get("data")
+
+        if not isinstance(data, dict):
+            raise RuntimeError(
+                "FreeAstroAPI did not return the expected "
+                "personal horoscope data."
+            )
+
+        returned_date = str(
+            data.get("date", "")
+        ).strip()
+
+        if returned_date and returned_date != target_date:
+            raise RuntimeError(
+                "FreeAstroAPI returned the wrong date. "
+                f"Requested {target_date}, received {returned_date}."
+            )
+
+        return result
+
+    raise RuntimeError(
+        "FreeAstroAPI failed unexpectedly."
+    ) from last_error
 
 
 # ---------------------------------------------------------
-# GEMINI INTERPRETATION
+# SOURCE PREPARATION
 # ---------------------------------------------------------
 
-def astrology_source_text(api_result: dict) -> str:
-    """Convert the structured astrology response into compact JSON."""
+def astrology_source_text(
+    api_result: dict,
+) -> str:
+    """Convert the API response to readable JSON for Gemini."""
 
-    data = api_result.get("data", api_result)
+    data = api_result.get(
+        "data",
+        api_result,
+    )
 
     source = json.dumps(
         data,
@@ -268,17 +365,19 @@ def astrology_source_text(api_result: dict) -> str:
     return source[:MAX_ASTROLOGY_JSON_CHARACTERS]
 
 
-def build_prompt(
-    api_result: dict,
+# ---------------------------------------------------------
+# MORNING PROMPT
+# ---------------------------------------------------------
+
+def build_morning_prompt(
+    source_text: str,
     date_text: str,
     personal_context: str,
 ) -> str:
-    """Build the instructions for Gemini."""
-
-    source_text = astrology_source_text(api_result)
+    """Create the morning motivation and advice prompt."""
 
     return f"""
-Prepare a private morning astrology reading for one person.
+Prepare a private morning astrology message for one person.
 
 DATE
 {date_text}, Melbourne, Australia.
@@ -287,140 +386,272 @@ PERSONAL CONTEXT
 {personal_context}
 
 SOURCE
-The JSON below is a personalised Western astrology horoscope calculated from
-this person's birth details. It can include a daily theme, scores, top natal
-transits, exact transit times, active windows, interpretation blocks, focus
-areas and broader monthly patterns.
+The JSON below contains the person's personalised astrology for today,
+including natal transits, aspects, interpretation blocks, timing information,
+scores, themes and longer-running influences.
 
-Use the source as the sole astrological authority. Do not calculate placements
-or invent transits yourself.
+Use this source as the sole astrological authority. Do not invent transits,
+placements, events or predictions.
 
-VOICE
-Write like a perceptive friend who understands astrology and knows the person's
-circumstances. Use formal, natural and direct language. The reading should feel
-considered and personally useful, not like an AI summary, motivational post or
-newspaper horoscope.
+PURPOSE
+This message will be read at 7:30 in the morning. It must help the person begin
+the day with direction, motivation and a clear plan.
 
-ASTROLOGICAL LANGUAGE
-Retain the exact names of the one to three most important transits, aspects,
-planets, natal points or chart patterns from the source. For example, preserve
-"Mars Conjunction Natal Midheaven" rather than reducing it to "career energy".
-Explain the practical meaning in ordinary language immediately afterwards.
+Write like a perceptive and trusted friend who understands astrology and knows
+the person's circumstances.
 
-When the source provides an exact time or active window, mention it only when it
-materially changes what the person should do. Convert technical UTC timing into
-plain Melbourne terms only when you can do so confidently from the supplied
-information. Otherwise, describe it as morning, afternoon, evening or an active
-background influence without inventing precision.
+The tone must be:
+- calm;
+- formal but natural;
+- decisive;
+- specific;
+- encouraging without sounding sentimental;
+- practical rather than mystical.
 
-PRACTICAL ADVICE
-Give specific advice about what the person should do and avoid today. Where the
-source supports it, connect the reading to university work, the final-year
-project, internship applications, technical development, part-time work,
-finances, communication, relationships or routine.
+Preserve the exact language of the strongest one to three astrological
+influences. For example, retain “Mercury square natal Saturn” rather than
+reducing it to “communication problems”.
 
-Choose only the life areas genuinely supported by the transits. Do not mention
-every area merely because it appears in the personal context.
+Immediately explain what each relevant influence means in practical terms.
 
-Good advice is concrete. Prefer language such as:
-- finish the draft before beginning another application;
-- ask for clarification before agreeing;
-- send the prepared message rather than revising it repeatedly;
-- postpone a permanent decision until the emotional pressure settles;
-- use the productive period for concentrated technical work;
-- do not turn one difficult conversation into a judgement about the entire
-  relationship.
+Connect the reading to university, the final-year project, internship
+applications, work, finances, relationships or routine only where the source
+supports that connection.
+
+Do not use phrases such as:
+- trust the process;
+- embrace change;
+- protect your energy;
+- stay positive;
+- the universe is telling you;
+- step into your power;
+- navigate these energies;
+- balance is key.
+
+Give direct instructions. Explain precisely what should receive attention and
+what behaviour is likely to waste the day.
+
+Do not invent:
+- job offers;
+- arguments;
+- deadlines;
+- financial gains or losses;
+- health problems;
+- named people;
+- guaranteed outcomes.
+
+OUTPUT FORMAT
+
+Return only the finished message in this exact structure:
+
+Morning — {date_text}
+
+Direction
+Write one paragraph of three or four sentences. Name the strongest astrological
+influence, explain its meaning and state the most productive approach to today.
+
+Your priorities
+• One specific and realistic action to complete today.
+• A second specific action supported by the source.
+• A third point only if it adds genuine value.
+
+Avoid
+• One specific reaction, distraction or decision to avoid.
+• A second point only when supported.
+
+Keep in mind
+Write one firm but encouraging sentence that gives the person motivation
+without using a cliché.
+
+Keep the complete response between 130 and 200 words.
+
+Do not use emojis, hashtags, lucky numbers, ratings, disclaimers, markdown bold
+markers, an introduction or a conclusion.
+
+PERSONALISED ASTROLOGY JSON
+
+{source_text}
+""".strip()
+
+
+# ---------------------------------------------------------
+# EVENING PROMPT
+# ---------------------------------------------------------
+
+def build_evening_prompt(
+    source_text: str,
+    date_text: str,
+    personal_context: str,
+) -> str:
+    """Create the next-day preparation prompt."""
+
+    return f"""
+Prepare a private evening astrology message for one person.
+
+TOMORROW'S DATE
+{date_text}, Melbourne, Australia.
+
+PERSONAL CONTEXT
+{personal_context}
+
+SOURCE
+The JSON below contains the person's personalised astrology for tomorrow,
+including natal transits, aspects, interpretation blocks, timing information,
+scores, themes and longer-running influences.
+
+Use this source as the sole astrological authority. Do not invent transits,
+placements, events or predictions.
+
+PURPOSE
+This message will be read at 8:30 tonight. It must explain tomorrow's strongest
+astrological influences and tell the person how to prepare tonight.
+
+Write like a perceptive and trusted friend who understands astrology and knows
+the person's circumstances.
+
+The tone must be:
+- calm;
+- formal but natural;
+- direct;
+- specific;
+- practical;
+- thoughtful rather than dramatic.
+
+Preserve the exact language of the strongest one to three astrological
+influences. For example, retain “Mars trine natal Midheaven” and then explain
+what it means for tomorrow's actions.
+
+Separate what should be prepared tonight from what should be done tomorrow.
+
+Where supported by the source, give concrete preparation such as:
+- write tomorrow's first task down tonight;
+- prepare documents or notes before an important conversation;
+- finish a minor loose end so it does not consume tomorrow;
+- postpone sending a reactive message;
+- arrange focused time for technical or university work;
+- decide which application or task deserves priority;
+- allow extra time before making a permanent decision.
+
+Only connect the reading to university, the final-year project, internship
+applications, work, finances, relationships or routine when the source
+genuinely supports it.
 
 Do not use vague phrases such as:
 - trust the process;
 - embrace change;
 - protect your energy;
 - stay positive;
-- be mindful;
 - the universe is telling you;
 - step into your power;
-- balance is key;
-- navigate these energies.
+- navigate these energies;
+- balance is key.
 
-Do not invent events, arguments, job offers, financial outcomes, health issues,
-deadlines or named people. Treat astrology as guidance, not certainty.
+Do not invent:
+- job offers;
+- arguments;
+- deadlines;
+- financial outcomes;
+- health issues;
+- named people;
+- guaranteed events.
 
-OUTPUT
-Return only the finished reading in this exact structure:
+OUTPUT FORMAT
 
-{date_text}
+Return only the finished message in this exact structure:
 
-Today
-Write one paragraph of three or four sentences. Name the strongest daily
-transit or pattern, explain its practical meaning and state the principal way
-the person should approach the day.
+Tomorrow — {date_text}
 
-Do
-• One specific action.
-• A second specific action only when clearly supported.
+Outlook
+Write one paragraph of three or four sentences. Name tomorrow's strongest
+astrological influence, explain what it means and state the best overall
+approach.
 
-Avoid
-• One specific reaction, behaviour or decision to avoid.
-• A second point only when clearly supported.
+Prepare tonight
+• One specific thing to organise, write, finish or decide tonight.
+• A second preparation step only when supported.
 
-This month
-Write one paragraph of two or three sentences using the source's dominant
-monthly topics, active windows or background patterns. State what deserves
-sustained attention and what longer-term mistake should be avoided.
+Tomorrow's priorities
+• One specific action to prioritise tomorrow.
+• A second specific action supported by the source.
 
-Keep the full reading between 120 and 190 words. Do not add emojis, hashtags,
-rating scores, lucky numbers, disclaimers, an introduction or a conclusion.
-Do not use Markdown bold markers.
+Avoid tomorrow
+• One specific reaction, distraction or decision to avoid.
+• A second point only when supported.
+
+Keep the complete response between 140 and 210 words.
+
+Do not use emojis, hashtags, lucky numbers, ratings, disclaimers, markdown bold
+markers, an introduction or a conclusion.
 
 PERSONALISED ASTROLOGY JSON
+
 {source_text}
 """.strip()
 
 
-def clean_generated_message(message: str) -> str:
-    """Clean minor formatting errors from Gemini's response."""
+# ---------------------------------------------------------
+# GEMINI
+# ---------------------------------------------------------
 
-    message = message.strip().replace("**", "")
+def clean_generated_message(
+    message: str,
+) -> str:
+    """Clean minor formatting errors."""
+
+    message = message.strip()
+    message = message.replace("**", "")
     message = re.sub(r"\n{3,}", "\n\n", message)
 
     return message
 
 
-def validate_generated_message(message: str) -> None:
-    """Confirm that the expected sections are present."""
+def expected_sections(
+    mode: str,
+) -> tuple[str, ...]:
+    """Return the required headings for each reading."""
 
-    required_sections = (
-        "Today",
-        "Do",
+    if mode == "evening":
+        return (
+            "Tomorrow",
+            "Outlook",
+            "Prepare tonight",
+            "Tomorrow's priorities",
+            "Avoid tomorrow",
+        )
+
+    return (
+        "Morning",
+        "Direction",
+        "Your priorities",
         "Avoid",
-        "This month",
+        "Keep in mind",
     )
 
-    missing = [
-        section
-        for section in required_sections
-        if section.casefold() not in message.casefold()
-    ]
 
-    if missing:
-        raise RuntimeError(
-            "Gemini omitted required sections: "
-            + ", ".join(missing)
-        )
+def message_has_required_sections(
+    message: str,
+    mode: str,
+) -> bool:
+    """Check whether Gemini followed the requested format."""
 
-    if len(message) < 300:
-        raise RuntimeError(
-            "Gemini returned an unexpectedly short reading."
-        )
+    lowered = message.casefold()
+
+    return all(
+        section.casefold() in lowered
+        for section in expected_sections(mode)
+    )
 
 
 def generate_reading(
     api_result: dict,
+    mode: str,
     date_text: str,
 ) -> str:
-    """Turn structured astrology data into practical advice."""
+    """Generate either the morning or evening reading."""
 
-    api_key = required_setting("GEMINI_API_KEY")
+    gemini_key = required_setting(
+        "GEMINI_API_KEY"
+    )
 
     model_name = optional_setting(
         "GEMINI_MODEL",
@@ -432,47 +663,90 @@ def generate_reading(
         DEFAULT_PERSONAL_CONTEXT,
     )
 
-    prompt = build_prompt(
-        api_result=api_result,
-        date_text=date_text,
-        personal_context=personal_context,
+    source_text = astrology_source_text(
+        api_result
     )
 
-    client = genai.Client(api_key=api_key)
-
-    try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
+    if mode == "evening":
+        prompt = build_evening_prompt(
+            source_text=source_text,
+            date_text=date_text,
+            personal_context=personal_context,
         )
 
-    except Exception as error:
-        raise RuntimeError(
-            f"Gemini could not create the reading using "
-            f"'{model_name}'. Check GEMINI_API_KEY and the "
-            "free-tier quota."
-        ) from error
+    else:
+        prompt = build_morning_prompt(
+            source_text=source_text,
+            date_text=date_text,
+            personal_context=personal_context,
+        )
 
-    message = clean_generated_message(
-        response.text or ""
+    client = genai.Client(
+        api_key=gemini_key
     )
 
-    if not message:
-        raise RuntimeError(
-            "Gemini returned an empty reading."
+    last_error: Exception | None = None
+
+    for attempt in range(1, 3):
+        try:
+            response = client.models.generate_content(
+                model=model_name,
+                contents=prompt,
+            )
+
+        except Exception as error:
+            last_error = error
+
+            if attempt < 2:
+                time.sleep(5)
+                continue
+
+            raise RuntimeError(
+                f"Gemini could not create the {mode} reading "
+                f"using '{model_name}'."
+            ) from error
+
+        message = clean_generated_message(
+            response.text or ""
         )
 
-    validate_generated_message(message)
+        if not message:
+            last_error = RuntimeError(
+                "Gemini returned an empty response."
+            )
 
-    return message[:3_500]
+            if attempt < 2:
+                time.sleep(3)
+                continue
+
+            break
+
+        if not message_has_required_sections(
+            message,
+            mode,
+        ):
+            if attempt < 2:
+                prompt += (
+                    "\n\nYour previous response did not follow the required "
+                    "headings. Repeat the task using every exact heading."
+                )
+                continue
+
+        return message[:MAX_TELEGRAM_CHARACTERS]
+
+    raise RuntimeError(
+        "Gemini did not return a usable reading."
+    ) from last_error
 
 
 # ---------------------------------------------------------
 # TELEGRAM
 # ---------------------------------------------------------
 
-def send_telegram(message: str) -> None:
-    """Send the completed reading through Telegram."""
+def send_telegram(
+    message: str,
+) -> None:
+    """Send the completed message through Telegram."""
 
     bot_token = required_setting(
         "TELEGRAM_BOT_TOKEN"
@@ -487,39 +761,59 @@ def send_telegram(message: str) -> None:
         f"bot{bot_token}/sendMessage"
     )
 
-    try:
-        response = requests.post(
-            endpoint,
-            json={
-                "chat_id": chat_id,
-                "text": message,
-                "disable_web_page_preview": True,
-            },
-            timeout=30,
-        )
+    last_error: Exception | None = None
 
-        response.raise_for_status()
-        result = response.json()
+    for attempt in range(1, 4):
+        try:
+            response = requests.post(
+                endpoint,
+                json={
+                    "chat_id": chat_id,
+                    "text": message,
+                    "disable_web_page_preview": True,
+                },
+                timeout=30,
+            )
 
-    except requests.RequestException as error:
-        raise RuntimeError(
-            "Telegram could not be reached. Check your internet "
-            "connection, bot token and chat ID."
-        ) from error
+            response.raise_for_status()
+            result = response.json()
 
-    if not result.get("ok"):
-        description = result.get(
-            "description",
-            "Unknown Telegram error",
-        )
+        except (
+            requests.RequestException,
+            ValueError,
+        ) as error:
+            last_error = error
 
-        raise RuntimeError(
-            f"Telegram rejected the message: {description}"
-        )
+            if attempt < 3:
+                time.sleep(5)
+                continue
+
+            raise RuntimeError(
+                "Telegram could not be reached after three attempts."
+            ) from error
+
+        if not result.get("ok"):
+            description = result.get(
+                "description",
+                "Unknown Telegram error",
+            )
+
+            raise RuntimeError(
+                f"Telegram rejected the message: {description}"
+            )
+
+        return
+
+    raise RuntimeError(
+        "Telegram delivery failed."
+    ) from last_error
 
 
-def send_failure_message(error: Exception) -> None:
-    """Attempt to send a brief Telegram warning after a failure."""
+def send_failure_message(
+    error: Exception,
+    mode: str,
+) -> None:
+    """Attempt to report an automation failure through Telegram."""
 
     bot_token = os.getenv(
         "TELEGRAM_BOT_TOKEN",
@@ -534,11 +828,14 @@ def send_failure_message(error: Exception) -> None:
     if not bot_token or not chat_id:
         return
 
-    safe_error = str(error).replace("\n", " ")[:500]
+    safe_error = str(error).replace(
+        "\n",
+        " ",
+    )[:500]
 
     try:
         send_telegram(
-            "Horoscope automation failed.\n"
+            f"The {mode} astrology automation failed.\n"
             f"{safe_error}"
         )
 
@@ -551,31 +848,45 @@ def send_failure_message(error: Exception) -> None:
 # ---------------------------------------------------------
 
 def main() -> None:
-    """Run the complete horoscope process."""
+    """Run the morning or evening automation."""
 
+    mode = reading_mode()
     now = melbourne_now()
-    target_date = now.date().isoformat()
-    date_text = formatted_date(now)
 
-    print(
-        f"Requesting personalised astrology for {target_date}..."
+    target_datetime = determine_target_date(
+        mode=mode,
+        now=now,
     )
+
+    target_date = target_datetime.date().isoformat()
+    date_text = formatted_date(target_datetime)
+
+    if mode == "morning":
+        print(
+            f"Preparing this morning's reading for {target_date}..."
+        )
+
+    else:
+        print(
+            f"Preparing tomorrow's reading for {target_date}..."
+        )
 
     api_result = fetch_personal_horoscope(
         target_date
     )
 
     print(
-        "FreeAstroAPI returned the personalised horoscope successfully."
+        "FreeAstroAPI returned the personalised astrology successfully."
     )
 
     reading = generate_reading(
         api_result=api_result,
+        mode=mode,
         date_text=date_text,
     )
 
     print()
-    print("Generated reading:")
+    print("Generated message:")
     print()
     print(reading)
     print()
@@ -583,11 +894,16 @@ def main() -> None:
     send_telegram(reading)
 
     print(
-        "Reading delivered successfully through Telegram."
+        f"The {mode} astrology message was delivered successfully."
     )
 
 
 if __name__ == "__main__":
+    current_mode = os.getenv(
+        "READING_MODE",
+        "morning",
+    ).strip().casefold()
+
     try:
         main()
 
@@ -605,6 +921,9 @@ if __name__ == "__main__":
             file=sys.stderr,
         )
 
-        send_failure_message(error)
+        send_failure_message(
+            error=error,
+            mode=current_mode,
+        )
 
         sys.exit(1)
