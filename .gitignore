@@ -1,4 +1,6 @@
-.venv/
 .env
+.venv/
 __pycache__/
 *.pyc
+horoscope_log.txt
+astroseek_chrome_profile/

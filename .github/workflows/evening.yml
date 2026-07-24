@@ -1,19 +1,19 @@
-name: Evening next-day astrology message
+name: Evening next-day astrology and calendar advice
 
 on:
   workflow_dispatch:
 
   schedule:
-    - cron: "00 21 * * *"
+    - cron: "30 20 * * *"
       timezone: "Australia/Melbourne"
 
 permissions:
   contents: read
 
 jobs:
-  send-evening-reading:
+  send-evening-advice:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 7
 
     steps:
       - name: Download repository
@@ -28,7 +28,7 @@ jobs:
       - name: Install packages
         run: python -m pip install -r requirements.txt
 
-      - name: Generate and send tomorrow's reading
+      - name: Generate and send evening advice
         env:
           READING_MODE: evening
 
@@ -46,5 +46,22 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+
+          CALENDAR_LABEL_1: ${{ secrets.CALENDAR_LABEL_1 }}
+          CALENDAR_ICAL_URL_1: ${{ secrets.CALENDAR_ICAL_URL_1 }}
+
+          CALENDAR_LABEL_2: ${{ secrets.CALENDAR_LABEL_2 }}
+          CALENDAR_ICAL_URL_2: ${{ secrets.CALENDAR_ICAL_URL_2 }}
+
+          CALENDAR_LABEL_3: ${{ secrets.CALENDAR_LABEL_3 }}
+          CALENDAR_ICAL_URL_3: ${{ secrets.CALENDAR_ICAL_URL_3 }}
+
+          CALENDAR_LABEL_4: ${{ secrets.CALENDAR_LABEL_4 }}
+          CALENDAR_ICAL_URL_4: ${{ secrets.CALENDAR_ICAL_URL_4 }}
+
+          CALENDAR_LABEL_5: ${{ secrets.CALENDAR_LABEL_5 }}
+          CALENDAR_ICAL_URL_5: ${{ secrets.CALENDAR_ICAL_URL_5 }}
+
+          INCLUDE_CALENDAR_LOCATIONS: "false"
 
         run: python horoscope.py
