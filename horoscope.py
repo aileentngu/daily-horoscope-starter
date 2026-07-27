@@ -5,6 +5,7 @@ import sys
 import time
 from datetime import date, datetime, time as dt_time, timedelta
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import recurring_ical_events
@@ -30,74 +31,75 @@ if hasattr(sys.stderr, "reconfigure"):
 # ---------------------------------------------------------
 
 BASE_DIR = Path(__file__).resolve().parent
-ENV_FILE = BASE_DIR / ".env"
+load_dotenv(BASE_DIR / ".env")
 
 FREEASTRO_ENDPOINT = (
     "https://api.freeastroapi.com/api/v3/horoscope/daily/personal"
 )
 
-MELBOURNE_TIMEZONE = "Australia/Melbourne"
+MELBOURNE_TZ = "Australia/Melbourne"
 DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
 
-MAX_ASTROLOGY_JSON_CHARACTERS = 50_000
-MAX_TELEGRAM_CHARACTERS = 3_900
-DEFAULT_MAX_CALENDAR_EVENTS = 20
+MAX_ASTROLOGY_CHARS = 50_000
+MAX_TELEGRAM_CHARS = 3_800
 
 DEFAULT_PERSONAL_CONTEXT = """
 The recipient is a fourth-year mechatronics engineering student in Melbourne.
-They are ambitious and are working towards strong internships, graduate roles,
-technical growth and an internationally competitive career. They are also
-trying to maintain their wellbeing, friendships, family and relationships,
-while making room for hobbies, curiosity, creativity, self-expression and a
-life that does not feel entirely consumed by work.
 
-They respond best to advice that is direct, specific, calm and encouraging.
-They want help deciding what deserves effort, what can wait, how to look after
-themselves, how to relate to other people, and how to stay motivated without
-forcing productivity at all costs.
+They are balancing university, a final-year project, internship and graduate
+applications, technical development, part-time work, finances, wellbeing,
+friendships, family, relationships, hobbies, creativity and their general
+routine.
 
-Only connect the astrology to areas genuinely supported by the source and the
-calendar. Do not invent personal problems or assume every life area is active
-on every day.
+They prefer concise and practical advice. Only connect the astrology to an area
+of life when the astrology or calendar information genuinely supports it. Do
+not mention career, relationships, wellbeing, hobbies or motivation merely to
+cover every category.
 """.strip()
-
-load_dotenv(ENV_FILE)
 
 
 # ---------------------------------------------------------
 # ENVIRONMENT SETTINGS
 # ---------------------------------------------------------
 
-def required_setting(name: str) -> str:
-    """Return a required environment setting."""
+def required(name: str) -> str:
+    """Return a required environment variable."""
 
     value = os.getenv(name, "").strip()
 
     if not value:
         raise RuntimeError(
-            f"Missing {name}. Add it to your .env file or GitHub Secrets."
+            f"Missing {name}. Add it to .env and GitHub Secrets."
         )
 
     return value
 
 
-def optional_setting(name: str, default: str = "") -> str:
-    """Return an optional environment setting."""
+def optional(
+    name: str,
+    default: str = "",
+) -> str:
+    """Return an optional environment variable."""
 
-    value = os.getenv(name, "").strip()
-    return value if value else default
+    return os.getenv(name, "").strip() or default
 
 
-def integer_setting(name: str, minimum: int, maximum: int) -> int:
-    """Read and validate a required whole-number setting."""
+def whole_number(
+    name: str,
+    minimum: int,
+    maximum: int,
+) -> int:
+    """Read and validate a whole-number environment variable."""
 
-    raw_value = required_setting(name)
+    raw_value = required(name)
 
     try:
         value = int(raw_value)
+
     except ValueError as error:
         raise RuntimeError(
-            f"{name} must be a whole number. Received: {raw_value}"
+            f"{name} must be a whole number. "
+            f"Received: {raw_value}"
         ) from error
 
     if not minimum <= value <= maximum:
@@ -108,13 +110,13 @@ def integer_setting(name: str, minimum: int, maximum: int) -> int:
     return value
 
 
-def optional_integer_setting(
+def optional_whole_number(
     name: str,
     default: int,
     minimum: int,
     maximum: int,
 ) -> int:
-    """Read and validate an optional whole-number setting."""
+    """Read an optional whole-number environment variable."""
 
     raw_value = os.getenv(name, "").strip()
 
@@ -123,9 +125,11 @@ def optional_integer_setting(
 
     try:
         value = int(raw_value)
+
     except ValueError as error:
         raise RuntimeError(
-            f"{name} must be a whole number. Received: {raw_value}"
+            f"{name} must be a whole number. "
+            f"Received: {raw_value}"
         ) from error
 
     if not minimum <= value <= maximum:
@@ -136,33 +140,53 @@ def optional_integer_setting(
     return value
 
 
-def boolean_setting(name: str, default: bool) -> bool:
-    """Read a true-or-false environment setting."""
+def true_or_false(
+    name: str,
+    default: bool,
+) -> bool:
+    """Read a true-or-false environment variable."""
 
     raw_value = os.getenv(name, "").strip().casefold()
 
     if not raw_value:
         return default
 
-    if raw_value in {"true", "1", "yes", "y"}:
+    if raw_value in {
+        "true",
+        "1",
+        "yes",
+        "y",
+    }:
         return True
 
-    if raw_value in {"false", "0", "no", "n"}:
+    if raw_value in {
+        "false",
+        "0",
+        "no",
+        "n",
+    }:
         return False
 
     raise RuntimeError(
-        f"{name} must be true or false. Received: {raw_value}"
+        f"{name} must be true or false. "
+        f"Received: {raw_value}"
     )
 
 
 def reading_mode() -> str:
     """Return either morning or evening."""
 
-    mode = optional_setting("READING_MODE", "morning").casefold()
+    mode = optional(
+        "READING_MODE",
+        "morning",
+    ).casefold()
 
-    if mode not in {"morning", "evening"}:
+    if mode not in {
+        "morning",
+        "evening",
+    }:
         raise RuntimeError(
-            "READING_MODE must be either morning or evening."
+            "READING_MODE must be morning or evening."
         )
 
     return mode
@@ -173,24 +197,23 @@ def reading_mode() -> str:
 # ---------------------------------------------------------
 
 def melbourne_timezone() -> ZoneInfo:
-    """Return the Melbourne time-zone object."""
+    """Return Melbourne's time zone."""
 
     try:
-        return ZoneInfo(MELBOURNE_TIMEZONE)
+        return ZoneInfo(
+            MELBOURNE_TZ
+        )
+
     except ZoneInfoNotFoundError as error:
         raise RuntimeError(
             "Australia/Melbourne could not be loaded. "
-            "Install the tzdata package from requirements.txt."
+            "Install tzdata from requirements.txt."
         ) from error
 
 
-def melbourne_now() -> datetime:
-    """Return the current Melbourne date and time."""
-
-    return datetime.now(melbourne_timezone())
-
-
-def formatted_date(value: datetime) -> str:
+def date_label(
+    value: datetime,
+) -> str:
     """Format a date without a leading zero."""
 
     return (
@@ -200,38 +223,66 @@ def formatted_date(value: datetime) -> str:
     )
 
 
-def determine_target_datetime(mode: str, now: datetime) -> datetime:
-    """Use today in morning mode and tomorrow in evening mode."""
+def time_label(
+    value: datetime,
+) -> str:
+    """Format a time such as 7:30 am."""
 
-    if mode == "evening":
-        return now + timedelta(days=1)
+    hour = (
+        value.strftime("%I").lstrip("0")
+        or "12"
+    )
 
-    return now
-
-
-def format_clock_time(value: datetime) -> str:
-    """Format a time as 7:30 am rather than 07:30 AM."""
-
-    hour = value.strftime("%I").lstrip("0") or "12"
-    return f"{hour}:{value.strftime('%M')} {value.strftime('%p').lower()}"
+    return (
+        f"{hour}:"
+        f"{value.strftime('%M')} "
+        f"{value.strftime('%p').lower()}"
+    )
 
 
 # ---------------------------------------------------------
 # BIRTH DETAILS
 # ---------------------------------------------------------
 
-def build_birth_details() -> dict:
-    """Build the birth-information object sent to FreeAstroAPI."""
+def birth_details() -> dict[str, Any]:
+    """Build the birth-details object for FreeAstroAPI."""
 
     return {
-        "year": integer_setting("BIRTH_YEAR", 1800, 2200),
-        "month": integer_setting("BIRTH_MONTH", 1, 12),
-        "day": integer_setting("BIRTH_DAY", 1, 31),
-        "hour": integer_setting("BIRTH_HOUR", 0, 23),
-        "minute": integer_setting("BIRTH_MINUTE", 0, 59),
-        "city": required_setting("BIRTH_CITY"),
-        "tz_str": required_setting("BIRTH_TIMEZONE"),
-        "time_known": boolean_setting("BIRTH_TIME_KNOWN", default=True),
+        "year": whole_number(
+            "BIRTH_YEAR",
+            1800,
+            2200,
+        ),
+        "month": whole_number(
+            "BIRTH_MONTH",
+            1,
+            12,
+        ),
+        "day": whole_number(
+            "BIRTH_DAY",
+            1,
+            31,
+        ),
+        "hour": whole_number(
+            "BIRTH_HOUR",
+            0,
+            23,
+        ),
+        "minute": whole_number(
+            "BIRTH_MINUTE",
+            0,
+            59,
+        ),
+        "city": required(
+            "BIRTH_CITY"
+        ),
+        "tz_str": required(
+            "BIRTH_TIMEZONE"
+        ),
+        "time_known": true_or_false(
+            "BIRTH_TIME_KNOWN",
+            True,
+        ),
     }
 
 
@@ -239,545 +290,535 @@ def build_birth_details() -> dict:
 # FREEASTROAPI
 # ---------------------------------------------------------
 
-def fetch_personal_horoscope(target_date: str) -> dict:
-    """Request the personalised horoscope for a specified date."""
+def fetch_astrology(
+    target_date: str,
+) -> dict[str, Any]:
+    """Retrieve personalised astrology for the requested date."""
 
-    api_key = required_setting("FREEASTRO_API_KEY")
+    response = requests.post(
+        FREEASTRO_ENDPOINT,
+        headers={
+            "Content-Type": "application/json",
+            "x-api-key": required(
+                "FREEASTRO_API_KEY"
+            ),
+        },
+        json={
+            "birth": birth_details(),
+            "date": target_date,
+            "tz_str": MELBOURNE_TZ,
+            "include_interpretation_blocks": True,
+        },
+        timeout=90,
+    )
 
-    payload = {
-        "birth": build_birth_details(),
-        "date": target_date,
-        "tz_str": MELBOURNE_TIMEZONE,
-        "include_interpretation_blocks": True,
-    }
+    if response.status_code in {
+        401,
+        403,
+    }:
+        raise RuntimeError(
+            "FreeAstroAPI rejected FREEASTRO_API_KEY."
+        )
 
-    last_error: Exception | None = None
+    if response.status_code == 429:
+        raise RuntimeError(
+            "The FreeAstroAPI request allowance "
+            "has been reached."
+        )
 
-    for attempt in range(1, 4):
-        try:
-            response = requests.post(
-                FREEASTRO_ENDPOINT,
-                headers={
-                    "Content-Type": "application/json",
-                    "x-api-key": api_key,
-                },
-                json=payload,
-                timeout=90,
-            )
-        except requests.RequestException as error:
-            last_error = error
+    if not response.ok:
+        preview = response.text[:700].replace(
+            "\n",
+            " ",
+        )
 
-            if attempt < 3:
-                time.sleep(5)
-                continue
+        raise RuntimeError(
+            f"FreeAstroAPI returned HTTP "
+            f"{response.status_code}: {preview}"
+        )
 
-            raise RuntimeError(
-                "FreeAstroAPI could not be reached after three attempts."
-            ) from error
+    try:
+        result = response.json()
 
-        if response.status_code in {401, 403}:
-            raise RuntimeError(
-                "FreeAstroAPI rejected FREEASTRO_API_KEY."
-            )
+    except ValueError as error:
+        raise RuntimeError(
+            "FreeAstroAPI returned invalid JSON."
+        ) from error
 
-        if response.status_code == 429:
-            raise RuntimeError(
-                "The FreeAstroAPI request allowance has been reached."
-            )
+    data = result.get("data")
 
-        if response.status_code >= 500 and attempt < 3:
-            time.sleep(5)
-            continue
+    if not isinstance(data, dict):
+        raise RuntimeError(
+            "FreeAstroAPI did not return "
+            "the expected data."
+        )
 
-        if not response.ok:
-            preview = response.text[:700].replace("\n", " ")
-            raise RuntimeError(
-                f"FreeAstroAPI returned HTTP "
-                f"{response.status_code}: {preview}"
-            )
+    returned_date = str(
+        data.get("date", "")
+    ).strip()
 
-        try:
-            result = response.json()
-        except ValueError as error:
-            raise RuntimeError(
-                "FreeAstroAPI returned invalid JSON."
-            ) from error
+    if (
+        returned_date
+        and returned_date != target_date
+    ):
+        raise RuntimeError(
+            f"FreeAstroAPI returned {returned_date}, "
+            f"but {target_date} was requested."
+        )
 
-        data = result.get("data")
-
-        if not isinstance(data, dict):
-            raise RuntimeError(
-                "FreeAstroAPI did not return the expected "
-                "personal horoscope data."
-            )
-
-        returned_date = str(data.get("date", "")).strip()
-
-        if returned_date and returned_date != target_date:
-            raise RuntimeError(
-                "FreeAstroAPI returned the wrong date. "
-                f"Requested {target_date}, received {returned_date}."
-            )
-
-        return result
-
-    raise RuntimeError(
-        "FreeAstroAPI failed unexpectedly."
-    ) from last_error
+    return result
 
 
 # ---------------------------------------------------------
-# GOOGLE CALENDAR ICAL
+# GOOGLE CALENDAR
 # ---------------------------------------------------------
 
-def fetch_calendar_bytes() -> bytes:
-    """Download the private read-only Google Calendar iCal feed."""
+def download_calendar() -> Calendar | None:
+    """
+    Download the Google Calendar iCal feed.
 
-    calendar_url = required_setting("GOOGLE_CALENDAR_ICAL_URL")
-    last_error: Exception | None = None
+    A missing calendar URL is allowed and is treated as an empty calendar.
+    """
 
-    for attempt in range(1, 4):
-        try:
-            response = requests.get(calendar_url, timeout=45)
-        except requests.RequestException as error:
-            last_error = error
+    calendar_url = optional(
+        "GOOGLE_CALENDAR_ICAL_URL"
+    )
 
-            if attempt < 3:
-                time.sleep(5)
-                continue
+    if not calendar_url:
+        print(
+            "No calendar URL supplied. "
+            "Continuing without events."
+        )
 
-            raise RuntimeError(
-                "Google Calendar could not be reached after three attempts."
-            ) from error
+        return None
 
-        if response.status_code in {401, 403, 404, 410}:
-            raise RuntimeError(
-                "Google Calendar rejected the private iCal address. "
-                "Copy a fresh Secret address in iCal format and update "
-                "GOOGLE_CALENDAR_ICAL_URL."
-            )
+    response = requests.get(
+        calendar_url,
+        timeout=45,
+    )
 
-        if response.status_code >= 500 and attempt < 3:
-            time.sleep(5)
-            continue
+    if response.status_code in {
+        401,
+        403,
+        404,
+        410,
+    }:
+        raise RuntimeError(
+            "Google Calendar rejected "
+            "the secret iCal address."
+        )
 
-        if not response.ok:
-            preview = response.text[:300].replace("\n", " ")
-            raise RuntimeError(
-                f"Google Calendar returned HTTP "
-                f"{response.status_code}: {preview}"
-            )
+    if not response.ok:
+        raise RuntimeError(
+            f"Google Calendar returned HTTP "
+            f"{response.status_code}."
+        )
 
-        if b"BEGIN:VCALENDAR" not in response.content[:5000]:
-            raise RuntimeError(
-                "The Google Calendar address did not return an iCalendar feed."
-            )
+    if (
+        b"BEGIN:VCALENDAR"
+        not in response.content[:5000]
+    ):
+        raise RuntimeError(
+            "The calendar address did not return "
+            "an iCalendar feed."
+        )
 
-        return response.content
+    try:
+        return Calendar.from_ical(
+            response.content
+        )
 
-    raise RuntimeError(
-        "Google Calendar failed unexpectedly."
-    ) from last_error
+    except Exception as error:
+        raise RuntimeError(
+            "The Google Calendar feed "
+            "could not be parsed."
+        ) from error
 
 
-def clean_event_text(value: object, maximum_length: int = 140) -> str:
-    """Clean text taken from a calendar event."""
+def clean_text(
+    value: object,
+    limit: int = 160,
+) -> str:
+    """Clean text read from a calendar event."""
 
     if value is None:
         return ""
 
-    text = re.sub(r"\s+", " ", str(value)).strip()
+    cleaned = re.sub(
+        r"\s+",
+        " ",
+        str(value),
+    ).strip()
 
-    if len(text) > maximum_length:
-        text = text[: maximum_length - 1].rstrip() + "…"
+    if len(cleaned) <= limit:
+        return cleaned
 
-    return text
-
-
-def normalise_datetime(value: datetime, timezone: ZoneInfo) -> datetime:
-    """Convert an event datetime to Melbourne time."""
-
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone)
-
-    return value.astimezone(timezone)
+    return (
+        cleaned[: limit - 1].rstrip()
+        + "…"
+    )
 
 
-def decoded_event_value(event, property_name: str):
-    """Decode an iCalendar property if it exists."""
+def decoded(
+    event: Any,
+    name: str,
+) -> Any:
+    """Decode an iCalendar event property."""
 
-    property_value = event.get(property_name)
+    value = event.get(name)
 
-    if property_value is None:
+    if value is None:
         return None
 
     try:
-        return event.decoded(property_name)
+        return event.decoded(name)
+
     except Exception:
-        return getattr(property_value, "dt", property_value)
+        return getattr(
+            value,
+            "dt",
+            value,
+        )
 
 
-def event_time_details(
-    event,
-    target_date: date,
+def to_melbourne(
+    value: datetime,
+    timezone: ZoneInfo,
+) -> datetime:
+    """Convert an event time to Melbourne time."""
+
+    if value.tzinfo is None:
+        value = value.replace(
+            tzinfo=timezone
+        )
+
+    return value.astimezone(
+        timezone
+    )
+
+
+def event_time(
+    event: Any,
+    target: date,
     timezone: ZoneInfo,
 ) -> tuple[str, datetime]:
-    """Create the displayed time and sorting time for one event."""
+    """Return an event's displayed and sortable time."""
 
-    start_value = decoded_event_value(event, "DTSTART")
+    start = decoded(
+        event,
+        "DTSTART",
+    )
 
-    if start_value is None:
-        raise ValueError("Calendar event has no DTSTART.")
+    if start is None:
+        raise ValueError(
+            "Event has no start time."
+        )
 
-    end_value = decoded_event_value(event, "DTEND")
+    end = decoded(
+        event,
+        "DTEND",
+    )
 
-    if end_value is None:
-        duration = decoded_event_value(event, "DURATION")
+    if isinstance(start, datetime):
+        start_local = to_melbourne(
+            start,
+            timezone,
+        )
 
-        if duration is not None:
-            end_value = start_value + duration
-        elif isinstance(start_value, datetime):
-            end_value = start_value + timedelta(hours=1)
+        if isinstance(end, datetime):
+            end_local = to_melbourne(
+                end,
+                timezone,
+            )
+
         else:
-            end_value = start_value + timedelta(days=1)
+            end_local = (
+                start_local
+                + timedelta(hours=1)
+            )
 
-    if isinstance(start_value, datetime):
-        local_start = normalise_datetime(start_value, timezone)
+        displayed_time = (
+            f"{time_label(start_local)}"
+            f"–{time_label(end_local)}"
+        )
 
-        if isinstance(end_value, datetime):
-            local_end = normalise_datetime(end_value, timezone)
-        else:
-            local_end = local_start + timedelta(hours=1)
+        return (
+            displayed_time,
+            start_local,
+        )
 
-        start_text = format_clock_time(local_start)
-        end_text = format_clock_time(local_end)
-
-        if local_end > local_start:
-            time_text = f"{start_text}–{end_text}"
-        else:
-            time_text = start_text
-
-        return time_text, local_start
-
-    all_day_sort = datetime.combine(
-        target_date,
+    all_day_time = datetime.combine(
+        target,
         dt_time.min,
         tzinfo=timezone,
     )
 
-    return "All day", all_day_sort
+    return (
+        "All day",
+        all_day_time,
+    )
 
 
-def extract_calendar_events(target_date: date) -> list[dict[str, str]]:
+def get_calendar_events(
+    target: date,
+) -> list[dict[str, str]]:
     """
-    Return the target day's events, including recurring events.
+    Return calendar events for the requested date.
 
-    A calendar with no events, or a date with no matching events, returns an
-    empty list. This is a normal result and must not stop the horoscope.
+    No events is normal and returns an empty list.
     """
 
-    calendar_bytes = fetch_calendar_bytes()
+    calendar = download_calendar()
 
-    try:
-        calendar = Calendar.from_ical(calendar_bytes)
-    except Exception as error:
-        raise RuntimeError(
-            "The Google Calendar iCal feed could not be parsed."
-        ) from error
+    if calendar is None:
+        return []
 
-    event_components = [
-        component
+    has_event_components = any(
+        getattr(
+            component,
+            "name",
+            "",
+        ) == "VEVENT"
         for component in calendar.walk()
-        if getattr(component, "name", "") == "VEVENT"
-    ]
+    )
 
-    if not event_components:
+    if not has_event_components:
         return []
 
     timezone = melbourne_timezone()
 
-    day_start = datetime.combine(
-        target_date,
+    start = datetime.combine(
+        target,
         dt_time.min,
         tzinfo=timezone,
     )
-    day_end = day_start + timedelta(days=1)
+
+    end = (
+        start
+        + timedelta(days=1)
+    )
 
     try:
-        occurrences = recurring_ical_events.of(calendar).between(
-            day_start,
-            day_end,
+        occurrences = list(
+            recurring_ical_events
+            .of(calendar)
+            .between(start, end)
         )
+
     except IndexError:
         return []
+
     except Exception as error:
         raise RuntimeError(
-            "Recurring calendar events could not be expanded."
+            "Recurring calendar events "
+            "could not be expanded."
         ) from error
 
     if not occurrences:
         return []
 
-    include_locations = boolean_setting(
+    include_locations = true_or_false(
         "INCLUDE_EVENT_LOCATIONS",
-        default=False,
-    )
-    maximum_events = optional_integer_setting(
-        "MAX_CALENDAR_EVENTS",
-        default=DEFAULT_MAX_CALENDAR_EVENTS,
-        minimum=1,
-        maximum=50,
+        False,
     )
 
-    extracted: list[dict[str, object]] = []
-    seen: set[tuple[str, str, str]] = set()
+    maximum_events = optional_whole_number(
+        "MAX_CALENDAR_EVENTS",
+        20,
+        1,
+        50,
+    )
+
+    records: list[dict[str, Any]] = []
+    seen: set[
+        tuple[str, str, str]
+    ] = set()
 
     for event in occurrences:
-        status = clean_event_text(event.get("STATUS")).casefold()
+        status = clean_text(
+            event.get("STATUS")
+        ).casefold()
 
         if status == "cancelled":
             continue
 
-        title = clean_event_text(
-            event.get("SUMMARY"),
-            maximum_length=160,
-        ) or "Untitled event"
+        title = (
+            clean_text(
+                event.get("SUMMARY")
+            )
+            or "Untitled event"
+        )
 
         try:
-            time_text, sort_time = event_time_details(
+            displayed_time, sort_value = event_time(
                 event,
-                target_date,
+                target,
                 timezone,
             )
-        except (TypeError, ValueError):
+
+        except (
+            TypeError,
+            ValueError,
+        ):
             continue
 
-        uid = clean_event_text(
-            event.get("UID"),
-            maximum_length=200,
+        duplicate_key = (
+            clean_text(
+                event.get("UID"),
+                200,
+            ),
+            sort_value.isoformat(),
+            title,
         )
-        duplicate_key = (uid, sort_time.isoformat(), title)
 
         if duplicate_key in seen:
             continue
 
-        seen.add(duplicate_key)
+        seen.add(
+            duplicate_key
+        )
 
-        record: dict[str, object] = {
-            "time": time_text,
+        record: dict[str, Any] = {
+            "time": displayed_time,
             "title": title,
-            "_sort_time": sort_time,
+            "_sort": sort_value,
         }
 
         if include_locations:
-            location = clean_event_text(
+            location = clean_text(
                 event.get("LOCATION"),
-                maximum_length=140,
+                140,
             )
 
             if location:
                 record["location"] = location
 
-        extracted.append(record)
+        records.append(
+            record
+        )
 
-    extracted.sort(
+    records.sort(
         key=lambda item: (
-            item["_sort_time"],
-            str(item["title"]).casefold(),
+            item["_sort"],
+            str(
+                item["title"]
+            ).casefold(),
         )
     )
 
-    visible_events: list[dict[str, str]] = []
+    output: list[
+        dict[str, str]
+    ] = []
 
-    for record in extracted[:maximum_events]:
-        visible_event = {
-            "time": str(record["time"]),
-            "title": str(record["title"]),
+    for record in records[:maximum_events]:
+        event_output = {
+            "time": str(
+                record["time"]
+            ),
+            "title": str(
+                record["title"]
+            ),
         }
 
-        if "location" in record:
-            visible_event["location"] = str(record["location"])
+        if record.get("location"):
+            event_output["location"] = str(
+                record["location"]
+            )
 
-        visible_events.append(visible_event)
+        output.append(
+            event_output
+        )
 
-    return visible_events
+    return output
 
 
-def calendar_source_text(events: list[dict[str, str]]) -> str:
-    """Create a compact calendar section for Gemini."""
+# ---------------------------------------------------------
+# PROMPT SOURCE FORMATTING
+# ---------------------------------------------------------
+
+def calendar_for_prompt(
+    events: list[dict[str, str]],
+) -> str:
+    """Format calendar events for Gemini."""
 
     if not events:
         return (
-            "There are no scheduled calendar events for this date. Treat it "
-            "as an open day. Suggest a balanced structure that includes one "
-            "meaningful career or study task, space for wellbeing, connection "
-            "with other people, and time for a hobby or self-expression. Do "
-            "not invent meetings, shifts, appointments or deadlines."
+            "There are no scheduled calendar events "
+            "for this date. Treat it as an open day. "
+            "Suggest a sensible structure for the "
+            "available time, but do not invent "
+            "commitments."
         )
 
     lines = []
 
     for event in events:
-        line = f"- {event['time']}: {event['title']}"
+        line = (
+            f"- {event['time']}: "
+            f"{event['title']}"
+        )
 
         if event.get("location"):
-            line += f" — Location: {event['location']}"
+            line += (
+                f" — Location: "
+                f"{event['location']}"
+            )
 
-        lines.append(line)
+        lines.append(
+            line
+        )
 
-    return "\n".join(lines)
-
-
-# ---------------------------------------------------------
-# ASTROLOGY SOURCE
-# ---------------------------------------------------------
-
-def astrology_source_text(api_result: dict) -> str:
-    """Convert the astrology response into readable JSON."""
-
-    data = api_result.get("data", api_result)
-    source = json.dumps(data, ensure_ascii=False, indent=2)
-    return source[:MAX_ASTROLOGY_JSON_CHARACTERS]
+    return "\n".join(
+        lines
+    )
 
 
-# ---------------------------------------------------------
-# MORNING PROMPT
-# ---------------------------------------------------------
-
-def build_morning_prompt(
-    astrology_text: str,
-    calendar_text: str,
-    date_text: str,
-    personal_context: str,
+def astrology_for_prompt(
+    result: dict[str, Any],
 ) -> str:
-    """Create the morning wellbeing, relationships and progress prompt."""
+    """Convert the astrology data into readable JSON."""
 
-    return f"""
-Prepare a private morning astrology and calendar message for one person.
-
-DATE
-{date_text}, Melbourne, Australia.
-
-PERSONAL CONTEXT
-{personal_context}
-
-TODAY'S CALENDAR
-{calendar_text}
-
-PERSONALISED ASTROLOGY JSON
-{astrology_text}
-
-PURPOSE
-This message is read at 7:30 am. It should help the person enter the day with
-motivation, emotional steadiness and a clear sense of how to divide attention
-between wellbeing, relationships, career progress and personal expression.
-
-SOURCE RULES
-- Treat the calendar as factual.
-- Treat astrology as reflective guidance, not certainty.
-- Preserve the exact names of the strongest one to three transits or aspects.
-- Explain those influences in plain language immediately afterwards.
-- Mention event titles exactly as supplied.
-- Never invent events, deadlines, arguments, opportunities or outcomes.
-- When the calendar is empty, treat the day as genuinely open.
-
-BALANCE OF THE READING
-Give meaningful attention to all four areas below, while allowing the astrology
-and calendar to determine which area receives the greatest emphasis:
-
-1. Wellbeing
-Consider energy, rest, emotional regulation, exercise, food, pacing, boundaries
-and whether the person needs stimulation, recovery or steadiness. Do not give
-medical advice or invent symptoms.
-
-2. Connections
-Consider friendships, family, dating, partnership, teamwork and ordinary
-social contact. Explain whether the day favours reaching out, listening,
-clarifying, giving space, apologising, asking for support or having a direct
-conversation. Do not invent conflict.
-
-3. Career and progress
-Consider university, the final-year project, internship applications,
-technical development, part-time work, finances and long-term ambition. State
-what deserves concentrated effort and what can wait.
-
-4. Hobbies, expression and motivation
-Consider creativity, curiosity, personal style, music, art, writing, technical
-projects, exercise, play and any activity that helps the person feel like more
-than a worker. Give one realistic way to express or enjoy themselves today.
-
-STYLE
-Write like a perceptive friend who knows the person well. The tone should be
-formal but natural, warm without being sentimental, direct without being harsh,
-and specific without pretending certainty.
-
-Do not sound like:
-- an AI summary;
-- a motivational poster;
-- a productivity coach;
-- mystical marketing copy.
-
-Do not use phrases such as:
-- trust the process;
-- embrace change;
-- protect your energy;
-- stay positive;
-- step into your power;
-- the universe is telling you;
-- navigate these energies;
-- balance is key.
-
-OUTPUT FORMAT
-Return only the finished message using these exact headings:
-
-Morning — {date_text}
-
-Overall direction
-Write one paragraph of three to five sentences. Name the strongest transit or
-pattern, explain it clearly and state the best overall approach to the day.
-
-Wellbeing
-• Give one specific action that supports energy or emotional steadiness.
-• Add a second point only if clearly useful.
-
-Connections
-• Give one specific action involving other people.
-• State the main social or communication mistake to avoid.
-
-Career and progress
-• Name the highest-value task, event or career action for today.
-• Explain what should be delayed, simplified or ignored.
-
-Hobbies and expression
-• Give one realistic way to make time for curiosity, enjoyment or expression.
-
-Motivation
-Write one firm, personal and encouraging sentence. It must acknowledge the
-person's ambition without implying that their worth depends on productivity.
-
-Keep the complete response between 210 and 300 words. Do not add emojis,
-hashtags, lucky numbers, ratings, disclaimers, Markdown bold markers, an
-introduction or a conclusion.
-""".strip()
+    return json.dumps(
+        result.get(
+            "data",
+            result,
+        ),
+        ensure_ascii=False,
+        indent=2,
+    )[:MAX_ASTROLOGY_CHARS]
 
 
 # ---------------------------------------------------------
-# EVENING PROMPT
+# GEMINI PROMPTS
 # ---------------------------------------------------------
 
-def build_evening_prompt(
-    astrology_text: str,
-    calendar_text: str,
-    date_text: str,
-    personal_context: str,
+def build_prompt(
+    result: dict[str, Any],
+    events: list[dict[str, str]],
+    mode: str,
+    target_label: str,
 ) -> str:
-    """Create the evening next-day preparation prompt."""
+    """Build either the morning or evening prompt."""
 
-    return f"""
-Prepare a private evening astrology and calendar message for one person.
+    personal_context = optional(
+        "PERSONAL_CONTEXT",
+        DEFAULT_PERSONAL_CONTEXT,
+    )
 
-TOMORROW'S DATE
-{date_text}, Melbourne, Australia.
+    calendar_text = calendar_for_prompt(
+        events
+    )
+
+    astrology_text = astrology_for_prompt(
+        result
+    )
+
+    if mode == "evening":
+        return f"""
+Prepare a private next-day preparation message for one person.
+
+TOMORROW
+{target_label}, Melbourne, Australia.
 
 PERSONAL CONTEXT
 {personal_context}
@@ -785,217 +826,247 @@ PERSONAL CONTEXT
 TOMORROW'S CALENDAR
 {calendar_text}
 
-PERSONALISED ASTROLOGY JSON
+TOMORROW'S PERSONALISED ASTROLOGY JSON
 {astrology_text}
 
 PURPOSE
-This message is read at 8:30 pm. It should explain tomorrow's most important
-astrological influences and help the person prepare in a way that supports
-wellbeing, relationships, career progress, hobbies, expression and motivation.
+This message is read at 8:30 pm. It must contain only practical preparation
+for tomorrow. Do not provide a general horoscope summary, motivational speech,
+monthly outlook, retrospective discussion or broad life advice.
 
-SOURCE RULES
-- Treat the calendar as factual.
-- Treat astrology as reflective guidance, not certainty.
-- Preserve the exact names of the strongest one to three transits or aspects.
-- Explain those influences in plain language immediately afterwards.
-- Mention event titles exactly as supplied.
-- Never invent events, deadlines, arguments, opportunities or outcomes.
-- When the calendar is empty, treat tomorrow as an open day.
+SELECTION RULES
+- Use only the strongest one to three astrological influences.
+- Preserve the exact transit or aspect names when they are useful.
+- Include a calendar event only when it materially changes the preparation.
+- Do not mention every event or every life area merely to appear comprehensive.
+- Select only the advice that is highly relevant to tomorrow's horoscope.
+- If tomorrow has no events, prepare the person for an open day without
+  inventing commitments.
+- Treat the calendar as factual and astrology as reflective guidance.
+- Do not invent events, deadlines, attendees, travel times, outcomes, health
+  problems, arguments, job offers or financial results.
 
-BALANCE OF THE READING
-Address the following areas, but let the astrology determine which one carries
-the greatest emphasis:
-
-1. Wellbeing
-Explain what should be prepared tonight to support tomorrow's energy, rest,
-pacing, emotional steadiness or boundaries. Do not give medical advice.
-
-2. Connections
-Explain whether tomorrow favours reaching out, listening, clarifying, asking
-for help, giving someone space or approaching a conversation directly. Do not
-invent interpersonal problems.
-
-3. Career and progress
-Identify the most valuable university, project, application, work or financial
-action for tomorrow. Tie it to actual calendar events when available.
-
-4. Hobbies, expression and motivation
-Include a realistic way to preserve curiosity, creativity, play, movement or
-self-expression so tomorrow does not become purely transactional.
+WHAT COUNTS AS USEFUL PREPARATION
+Examples include preparing documents, setting out equipment, writing the first
+task, deciding the order of work, planning how to approach a conversation,
+setting a boundary, scheduling rest, removing a distraction, postponing a
+reactive message or protecting a focused work period. Use only examples
+supported by the source.
 
 STYLE
-Write like a perceptive friend who knows the person well. Be calm, natural,
-formal, specific and kind. Do not sound like an AI summary, life coach,
-productivity app or mystical advertisement.
+Write like a perceptive friend: concise, direct, formal but natural. Avoid
+generic AI language, mystical claims and filler. Do not use phrases such as
+“trust the process”, “embrace change”, “protect your energy”, “stay positive”,
+“step into your power” or “balance is key”.
 
-Do not use phrases such as:
-- trust the process;
-- embrace change;
-- protect your energy;
-- stay positive;
-- step into your power;
-- the universe is telling you;
-- navigate these energies;
-- balance is key.
+RETURN ONLY THIS FORMAT
 
-OUTPUT FORMAT
-Return only the finished message using these exact headings:
+Prepare for tomorrow — {target_label}
 
-Tomorrow — {date_text}
+• [Concrete preparation step tied to the strongest relevant transit.]
+• [Second concrete preparation step.]
+• [Third concrete preparation step.]
+• [A fourth or fifth bullet only if it is genuinely useful.]
 
-Outlook
-Write one paragraph of three to five sentences. Name tomorrow's strongest
-transit or pattern, explain it clearly and state the best overall approach.
+Each bullet must tell the person what to do tonight. Where useful, name the
+relevant transit or tomorrow's event within the bullet. Keep the complete
+message between 70 and 130 words. Do not add any other heading, paragraph,
+conclusion, emoji, hashtag, rating, disclaimer or Markdown bold markers.
+""".strip()
 
-Prepare tonight
-• Give one concrete preparation step for tomorrow's schedule or open day.
-• Give one action that supports rest or emotional steadiness.
+    return f"""
+Prepare a concise private morning astrology-and-calendar message for one person.
 
-Connections
-• Give one specific social or communication intention for tomorrow.
-• State what interpersonal reaction should be avoided.
+TODAY
+{target_label}, Melbourne, Australia.
 
-Career and progress
-• Name tomorrow's highest-value task or event and the best approach to it.
-• Explain what should not receive unnecessary time or pressure.
+PERSONAL CONTEXT
+{personal_context}
 
-Hobbies and expression
-• Give one realistic way to make room for enjoyment, curiosity or expression.
+TODAY'S CALENDAR
+{calendar_text}
 
-Motivation for tomorrow
-Write one firm, reassuring sentence that supports ambition without glorifying
-exhaustion or constant productivity.
+TODAY'S PERSONALISED ASTROLOGY JSON
+{astrology_text}
 
-Keep the complete response between 220 and 310 words. Do not add emojis,
-hashtags, lucky numbers, ratings, disclaimers, Markdown bold markers, an
-introduction or a conclusion.
+PURPOSE
+This message is read at 7:30 am. It must give specific, useful direction for
+today and a short monthly outlook. Use concise dot points rather than broad
+paragraphs.
+
+SELECTION RULES
+- Identify only the strongest one to three daily influences.
+- Preserve exact transit or aspect names when they improve the advice.
+- Include only advice that is clearly supported by the astrology.
+- Mention a calendar event only when it is materially relevant to the advice.
+- Do not mention every event, topic or area of life merely to cover it.
+- Choose from wellbeing, connections, career or study, hobbies or expression,
+  and motivation only when the source clearly supports that area.
+- If there are no calendar events, give useful open-day advice without saying
+  that the calendar is empty unless that fact matters.
+- Treat calendar entries as factual and astrology as reflective guidance.
+- Do not invent events, deadlines, attendees, outcomes, health problems,
+  arguments, job offers or financial results.
+
+MONTHLY RULES
+- Use only slow-moving, longer-running or multi-week influences actually present
+  in the source.
+- Give two or three concise monthly points where supported.
+- Do not turn a one-day transit into a month-long prediction.
+- If only one genuine longer-running theme exists, give one monthly bullet
+  rather than inventing more.
+
+STYLE
+Write like a perceptive friend: concise, specific, formal but natural. Every
+bullet should tell the person what to do, what to prioritise or what to avoid.
+Avoid generic AI language, motivational filler and mystical claims. Do not use
+phrases such as “trust the process”, “embrace change”, “protect your energy”,
+“stay positive”, “step into your power” or “balance is key”.
+
+RETURN ONLY THIS FORMAT
+
+Morning — {target_label}
+
+Main influence
+• [Name the strongest transit or aspect and state its practical meaning in one
+  concise sentence.]
+
+Do today
+• [Highest-value specific action.]
+• [Second specific action only if clearly supported.]
+• [Third action only if it adds genuine value.]
+
+Avoid today
+• [Most relevant reaction, distraction or decision to avoid.]
+• [Second point only if clearly supported.]
+
+This month
+• [Specific longer-term priority tied to a genuine longer-running influence.]
+• [Second monthly point where supported.]
+• [Third monthly point only if genuinely supported.]
+
+Keep the complete message between 90 and 160 words. Do not add paragraphs, a
+conclusion, emoji, hashtag, rating, disclaimer or Markdown bold markers.
 """.strip()
 
 
-# ---------------------------------------------------------
-# GEMINI
-# ---------------------------------------------------------
-
-def clean_generated_message(message: str) -> str:
-    """Clean minor formatting errors."""
-
-    message = message.strip().replace("**", "")
-    return re.sub(r"\n{3,}", "\n\n", message)
-
-
-def expected_sections(mode: str) -> tuple[str, ...]:
-    """Return the required headings for each message."""
+def required_sections(
+    mode: str,
+) -> tuple[str, ...]:
+    """Return the headings required for each mode."""
 
     if mode == "evening":
         return (
-            "Tomorrow",
-            "Outlook",
-            "Prepare tonight",
-            "Connections",
-            "Career and progress",
-            "Hobbies and expression",
-            "Motivation for tomorrow",
+            "Prepare for tomorrow",
         )
 
     return (
         "Morning",
-        "Overall direction",
-        "Wellbeing",
-        "Connections",
-        "Career and progress",
-        "Hobbies and expression",
-        "Motivation",
-    )
-
-
-def message_has_required_sections(message: str, mode: str) -> bool:
-    """Check that Gemini followed the requested format."""
-
-    lowered = message.casefold()
-    return all(
-        section.casefold() in lowered
-        for section in expected_sections(mode)
+        "Main influence",
+        "Do today",
+        "Avoid today",
+        "This month",
     )
 
 
 def generate_reading(
-    api_result: dict,
-    calendar_events: list[dict[str, str]],
+    result: dict[str, Any],
+    events: list[dict[str, str]],
     mode: str,
-    date_text: str,
+    target_label: str,
 ) -> str:
-    """Generate the calendar-aware morning or evening message."""
+    """Ask Gemini to produce the final message."""
 
-    gemini_key = required_setting("GEMINI_API_KEY")
-    model_name = optional_setting(
+    prompt = build_prompt(
+        result,
+        events,
+        mode,
+        target_label,
+    )
+
+    client = genai.Client(
+        api_key=required(
+            "GEMINI_API_KEY"
+        )
+    )
+
+    model = optional(
         "GEMINI_MODEL",
         DEFAULT_GEMINI_MODEL,
     )
-    personal_context = optional_setting(
-        "PERSONAL_CONTEXT",
-        DEFAULT_PERSONAL_CONTEXT,
-    )
 
-    astrology_text = astrology_source_text(api_result)
-    calendar_text = calendar_source_text(calendar_events)
-
-    if mode == "evening":
-        prompt = build_evening_prompt(
-            astrology_text=astrology_text,
-            calendar_text=calendar_text,
-            date_text=date_text,
-            personal_context=personal_context,
-        )
-    else:
-        prompt = build_morning_prompt(
-            astrology_text=astrology_text,
-            calendar_text=calendar_text,
-            date_text=date_text,
-            personal_context=personal_context,
-        )
-
-    client = genai.Client(api_key=gemini_key)
     last_error: Exception | None = None
 
-    for attempt in range(1, 3):
+    for attempt in range(2):
         try:
             response = client.models.generate_content(
-                model=model_name,
+                model=model,
                 contents=prompt,
             )
+
         except Exception as error:
             last_error = error
 
-            if attempt < 2:
+            if attempt == 0:
                 time.sleep(5)
                 continue
 
             raise RuntimeError(
-                f"Gemini could not create the {mode} reading "
-                f"using '{model_name}'."
+                f"Gemini could not create the "
+                f"{mode} reading using '{model}'."
             ) from error
 
-        message = clean_generated_message(response.text or "")
+        message = re.sub(
+            r"\n{3,}",
+            "\n\n",
+            (
+                response.text
+                or ""
+            )
+            .strip()
+            .replace("**", ""),
+        )
 
         if not message:
             last_error = RuntimeError(
                 "Gemini returned an empty response."
             )
+
             continue
 
-        if not message_has_required_sections(message, mode):
+        missing_sections = [
+            section
+            for section in required_sections(
+                mode
+            )
+            if (
+                section.casefold()
+                not in message.casefold()
+            )
+        ]
+
+        if missing_sections:
             last_error = RuntimeError(
-                "Gemini omitted one or more required headings."
+                "Gemini omitted: "
+                + ", ".join(
+                    missing_sections
+                )
             )
+
             prompt += (
-                "\n\nRepeat the task using every exact required heading."
+                "\n\nRepeat the answer using every "
+                "exact required heading."
             )
+
             continue
 
-        return message[:MAX_TELEGRAM_CHARACTERS]
+        return message[
+            :MAX_TELEGRAM_CHARS
+        ]
 
     raise RuntimeError(
-        "Gemini did not return a usable reading."
+        "Gemini did not return "
+        "a usable reading."
     ) from last_error
 
 
@@ -1003,71 +1074,80 @@ def generate_reading(
 # TELEGRAM
 # ---------------------------------------------------------
 
-def send_telegram(message: str) -> None:
-    """Send the completed message through Telegram."""
+def send_telegram(
+    message: str,
+) -> None:
+    """Send the message through Telegram."""
 
-    bot_token = required_setting("TELEGRAM_BOT_TOKEN")
-    chat_id = required_setting("TELEGRAM_CHAT_ID")
-    endpoint = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+    response = requests.post(
+        (
+            "https://api.telegram.org/bot"
+            f"{required('TELEGRAM_BOT_TOKEN')}"
+            "/sendMessage"
+        ),
+        json={
+            "chat_id": required(
+                "TELEGRAM_CHAT_ID"
+            ),
+            "text": message,
+            "disable_web_page_preview": True,
+        },
+        timeout=30,
+    )
 
-    last_error: Exception | None = None
+    try:
+        result = response.json()
 
-    for attempt in range(1, 4):
-        try:
-            response = requests.post(
-                endpoint,
-                json={
-                    "chat_id": chat_id,
-                    "text": message,
-                    "disable_web_page_preview": True,
-                },
-                timeout=30,
-            )
-            response.raise_for_status()
-            result = response.json()
-        except (requests.RequestException, ValueError) as error:
-            last_error = error
+    except ValueError as error:
+        raise RuntimeError(
+            "Telegram returned invalid data."
+        ) from error
 
-            if attempt < 3:
-                time.sleep(5)
-                continue
+    if (
+        not response.ok
+        or not result.get("ok")
+    ):
+        description = result.get(
+            "description",
+            f"HTTP {response.status_code}",
+        )
 
-            raise RuntimeError(
-                "Telegram could not be reached after three attempts."
-            ) from error
+        raise RuntimeError(
+            f"Telegram rejected the message: "
+            f"{description}"
+        )
 
-        if not result.get("ok"):
-            description = result.get(
-                "description",
-                "Unknown Telegram error",
-            )
-            raise RuntimeError(
-                f"Telegram rejected the message: {description}"
-            )
 
+def send_failure(
+    error: Exception,
+    mode: str,
+) -> None:
+    """Attempt to report an automation failure."""
+
+    if not os.getenv(
+        "TELEGRAM_BOT_TOKEN",
+        "",
+    ).strip():
         return
 
-    raise RuntimeError(
-        "Telegram delivery failed."
-    ) from last_error
-
-
-def send_failure_message(error: Exception, mode: str) -> None:
-    """Attempt to report an automation failure through Telegram."""
-
-    if not os.getenv("TELEGRAM_BOT_TOKEN", "").strip():
+    if not os.getenv(
+        "TELEGRAM_CHAT_ID",
+        "",
+    ).strip():
         return
 
-    if not os.getenv("TELEGRAM_CHAT_ID", "").strip():
-        return
-
-    safe_error = str(error).replace("\n", " ")[:500]
+    error_text = (
+        str(error)
+        .replace("\n", " ")[:500]
+    )
 
     try:
         send_telegram(
-            f"The {mode} astrology and calendar automation failed.\n"
-            f"{safe_error}"
+            f"The {mode} astrology "
+            f"automation failed.\n"
+            f"{error_text}"
         )
+
     except Exception:
         pass
 
@@ -1080,66 +1160,96 @@ def main() -> None:
     """Run the morning or evening automation."""
 
     mode = reading_mode()
-    now = melbourne_now()
-    target_datetime = determine_target_datetime(mode=mode, now=now)
 
-    target_date = target_datetime.date()
-    target_date_string = target_date.isoformat()
-    date_text = formatted_date(target_datetime)
-
-    print(
-        f"Preparing the {mode} reading for {target_date_string}..."
+    now = datetime.now(
+        melbourne_timezone()
     )
 
-    api_result = fetch_personal_horoscope(target_date_string)
+    if mode == "evening":
+        target_datetime = (
+            now
+            + timedelta(days=1)
+        )
+
+    else:
+        target_datetime = now
+
+    target = target_datetime.date()
+    target_string = target.isoformat()
+    target_label = date_label(
+        target_datetime
+    )
 
     print(
-        "FreeAstroAPI returned the personalised astrology successfully."
+        f"Preparing the {mode} reading "
+        f"for {target_string}..."
+    )
+
+    astrology = fetch_astrology(
+        target_string
+    )
+
+    print(
+        "FreeAstroAPI returned "
+        "the personalised astrology."
     )
 
     try:
-        calendar_events = extract_calendar_events(target_date)
-    except Exception as calendar_error:
-        print(
-            "WARNING: Google Calendar could not be read. "
-            "The horoscope will continue without calendar events.",
-            file=sys.stderr,
+        events = get_calendar_events(
+            target
         )
-        print(
-            f"Calendar error: {calendar_error}",
-            file=sys.stderr,
-        )
-        calendar_events = []
 
-    if calendar_events:
+    except Exception as error:
         print(
-            f"Google Calendar returned {len(calendar_events)} event(s) "
-            f"for the target date."
+            "WARNING: Calendar could not be read. "
+            "Continuing without events.",
+            file=sys.stderr,
         )
+
+        print(
+            f"Calendar error: {error}",
+            file=sys.stderr,
+        )
+
+        events = []
+
+    if events:
+        print(
+            f"Google Calendar returned "
+            f"{len(events)} event(s)."
+        )
+
     else:
         print(
-            "No calendar events were found for the target date. "
-            "Continuing with balanced open-day advice."
+            "No calendar events were found. "
+            "Continuing with open-day advice."
         )
 
     reading = generate_reading(
-        api_result=api_result,
-        calendar_events=calendar_events,
-        mode=mode,
-        date_text=date_text,
+        astrology,
+        events,
+        mode,
+        target_label,
     )
 
-    if boolean_setting("PRINT_READING_TO_LOG", default=False):
-        print()
-        print("Generated message:")
-        print()
+    if true_or_false(
+        "PRINT_READING_TO_LOG",
+        False,
+    ):
+        print(
+            "\nGenerated message:\n"
+        )
+
         print(reading)
         print()
 
-    send_telegram(reading)
+    send_telegram(
+        reading
+    )
 
     print(
-        f"The {mode} astrology and calendar message was delivered successfully."
+        f"The {mode} message "
+        f"was delivered successfully."
     )
 
 
@@ -1151,10 +1261,24 @@ if __name__ == "__main__":
 
     try:
         main()
+
     except KeyboardInterrupt:
-        print("\nThe program was stopped.", file=sys.stderr)
+        print(
+            "\nThe program was stopped.",
+            file=sys.stderr,
+        )
+
         sys.exit(130)
+
     except Exception as error:
-        print(f"\nERROR: {error}", file=sys.stderr)
-        send_failure_message(error=error, mode=current_mode)
+        print(
+            f"\nERROR: {error}",
+            file=sys.stderr,
+        )
+
+        send_failure(
+            error,
+            current_mode,
+        )
+
         sys.exit(1)
