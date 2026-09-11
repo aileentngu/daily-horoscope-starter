@@ -3,7 +3,7 @@ name: Evening next-day astrology and calendar message
 on:
   workflow_dispatch:
   schedule:
-    - cron: "30 20 * * *"
+    - cron: "30 18 * * *"
       timezone: "Australia/Melbourne"
 
 permissions:
