@@ -975,6 +975,24 @@ CALENDAR SEPARATION
 - Do not invent appointments or commitments. If empty, say
   'No calendar events listed'.
 
+TWO ENJOYABLE THINGS TO TRY
+- Finish the entire message with EXACTLY TWO different, easy, enjoyable
+  activities for {day_word}. Each must flow from a specific, already-described
+  planetary interpretation or dominant theme, never from a random suggestion.
+- Give the action first and a short, plain-English reason naming the relevant
+  previously discussed influence or life area. Do not introduce new astrology.
+- Think of ordinary, achievable options: a brief run or walk, trying a new
+  drink, arranging dinner with a friend, sketching or painting for 15 minutes,
+  visiting a different cafe, cooking something enjoyable, calling someone,
+  listening to music outside, or exploring a new nearby spot. These are
+  examples, NOT a fixed menu. Match the actual reading.
+- Make both ideas realistically achievable without costly purchases, major
+  commitments, or assuming a particular schedule, relationship or hobby.
+- Prefer two different types of activity rather than near-duplicates.
+- If astrology evidence is too thin to justify a connection, plainly frame
+  the suggestions as low-stakes ideas consistent with the established theme;
+  never fabricate a transit to justify them.
+
 RETURN EXACTLY THIS LAYOUT:
 
 {title} — {target_label}
@@ -995,6 +1013,12 @@ How to use it
 Calendar and practical plan
 • [Real events and times, paired with specific practical actions; only link
   to astrology already established above when genuinely justified.]
+
+Two fun things to try
+• [Easy, specific, enjoyable activity #1] — [one short reason linked to an
+  influence or life area already explained above.]
+• [Different easy, specific, enjoyable activity #2] — [one short reason linked
+  to an influence or life area already explained above.]
 
 Use concise dot points, direct British/Australian English and no AI jargon.
 No emojis, hashtags, hollow advice, introductions or conclusions.
@@ -1044,6 +1068,7 @@ def required_sections(
         "What's dominant",
         "How to use it",
         "Calendar and practical plan",
+        "Two fun things to try",
     )
 
 
