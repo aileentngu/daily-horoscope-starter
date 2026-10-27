@@ -1,96 +1,109 @@
-import json
-import os
-import re
-import sys
-import time
-from datetime import date, datetime, time as dt_time, timedelta
-from pathlib import Path
-from typing import Any
-from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+    )
 
-import recurring_ical_events
-import requests
-from dotenv import load_dotenv
-from google import genai
-from icalendar import Calendar
+    print(
+        "FreeAstroAPI returned "
+        "the personalised astrology."
+    )
 
+    try:
 
-# ---------------------------------------------------------
-# UTF-8 OUTPUT
-# ---------------------------------------------------------
-
-if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
-
-if hasattr(sys.stderr, "reconfigure"):
-    sys.stderr.reconfigure(encoding="utf-8")
-
-
-# ---------------------------------------------------------
-# PROGRAM SETTINGS
-# ---------------------------------------------------------
-
-BASE_DIR = Path(__file__).resolve().parent
-load_dotenv(BASE_DIR / ".env")
-
-FREEASTRO_ENDPOINT = (
-    "https://api.freeastroapi.com/api/v3/horoscope/daily/personal"
-)
-
-MELBOURNE_TZ = "Australia/Melbourne"
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
-
-MAX_ASTROLOGY_CHARS = 50_000
-MAX_TELEGRAM_CHARS = 3_800
-
-DEFAULT_PERSONAL_CONTEXT = """
-The recipient has a varied life including university, career development,
-friendships, family, relationships, wellbeing, fitness, hobbies, creativity,
-finances, personal expression, rest and ordinary day-to-day responsibilities.
-
-Do not assume career, university or productivity is the most important part of
-every reading.
-
-Let the astrology determine the focus.
-
-If the strongest transits point towards relationships, emotional wellbeing,
-home life, creativity, communication, confidence, identity, money, rest,
-motivation, hobbies, physical energy or another area, centre the reading there.
-
-Calendar events are useful practical context, but they are secondary to the
-astrology.
-
-The reading should first explain the planetary picture and what it means
-personally, then apply that selectively to the person's actual day.
-""".strip()
-
-
-# ---------------------------------------------------------
-# ENVIRONMENT SETTINGS
-# ---------------------------------------------------------
-
-def required(name: str) -> str:
-    """Return a required environment variable."""
-
-    value = os.getenv(name, "").strip()
-
-    if not value:
-        raise RuntimeError(
-            f"Missing {name}. Add it to .env and GitHub Secrets."
+        events = get_calendar_events(
+            target
         )
 
-    return value
+    except Exception as error:
+
+        print(
+            "WARNING: Calendar could not be read. "
+            "Continuing without events.",
+            file=sys.stderr,
+        )
+
+        print(
+            f"Calendar error: {error}",
+            file=sys.stderr,
+        )
+
+        events = []
+
+    if events:
+
+        print(
+            f"Google Calendar returned "
+            f"{len(events)} event(s)."
+        )
+
+    else:
+
+        print(
+            "No calendar events were found. "
+            "Continuing with open-day advice."
+        )
+
+    reading = generate_reading(
+        astrology,
+        events,
+        mode,
+        target_label,
+    )
+
+    if true_or_false(
+        "PRINT_READING_TO_LOG",
+        False,
+    ):
+
+        print(
+            "\nGenerated message:\n"
+        )
+
+        print(
+            reading
+        )
+
+        print()
+
+    send_long_telegram(reading)
+
+    print(
+        f"The {mode} message "
+        f"was delivered successfully."
+    )
 
 
-def optional(
-    name: str,
-    default: str = "",
-) -> str:
-    """Return an optional environment variable."""
+if __name__ == "__main__":
 
-    return os.getenv(name, "").strip() or default
+    current_mode = os.getenv(
+        "READING_MODE",
+        "morning",
+    ).strip().casefold()
 
+    try:
 
-def whole_number(
-    name: str,
-    minimum: int,
+        main()
+
+    except KeyboardInterrupt:
+
+        print(
+            "\nThe program was stopped.",
+            file=sys.stderr,
+        )
+
+        sys.exit(
+            130
+        )
+
+    except Exception as error:
+
+        print(
+            f"\nERROR: {error}",
+            file=sys.stderr,
+        )
+
+        send_failure(
+            error,
+            current_mode,
+        )
+
+        sys.exit(
+            1
+        )
