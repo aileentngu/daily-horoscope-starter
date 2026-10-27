@@ -1,3 +1,4 @@
+
 import json
 import os
 import re
@@ -883,388 +884,132 @@ def astrology_for_prompt(
 
 
 # ---------------------------------------------------------
-# MORNING PROMPT
+# ASTROLOGY PROMPTS
 # ---------------------------------------------------------
-
-def build_morning_prompt(
-    result: dict[str, Any],
-    events: list[dict[str, str]],
-    target_label: str,
-) -> str:
-    """
-    Build an astrology-first morning reading.
-
-    The astrology determines the life-area focus.
-    The calendar is secondary practical context.
-    """
-
-    personal_context = optional(
-        "PERSONAL_CONTEXT",
-        DEFAULT_PERSONAL_CONTEXT,
-    )
-
-    calendar_text = calendar_for_prompt(
-        events
-    )
-
-    astrology_text = astrology_for_prompt(
-        result
-    )
-
-    return f"""
-Prepare a concise personalised morning astrology reading.
-
-DATE
-{target_label}, Melbourne, Australia.
-
-PERSONAL CONTEXT
-{personal_context}
-
-TODAY'S CALENDAR
-{calendar_text}
-
-PERSONALISED ASTROLOGY JSON
-{astrology_text}
-
-CORE PURPOSE
-
-The reading must begin with the astrology itself, not with work, productivity
-or the calendar.
-
-Help the person understand what the current planetary positions, transits and
-aspects mean for them personally.
-
-After explaining the strongest astrology, apply it selectively to their actual
-day.
-
-ASTROLOGY-FIRST RULES
-
-1. Identify only the two to four most significant influences in the source.
-
-2. Preserve the real astrological language provided by the source wherever
-   useful, including:
-   - transiting planet;
-   - natal planet or point;
-   - conjunction;
-   - opposition;
-   - square;
-   - trine;
-   - sextile;
-   - retrograde status;
-   - sign placement;
-   - house placement.
-
-3. Mention signs or houses only if they are actually supplied by the source.
-   Never invent them.
-
-4. Briefly explain what the relevant planets represent so the person gradually
-   learns astrology.
-
-   Examples of the level of explanation wanted:
-   - Mercury concerns thinking, communication and learning.
-   - Venus concerns relationships, attraction, pleasure and values.
-   - Mars concerns drive, action, desire and assertion.
-   - Jupiter concerns expansion, opportunity and perspective.
-   - Saturn concerns limits, responsibility and structure.
-   - Uranus concerns disruption, independence and change.
-   - Neptune concerns imagination, sensitivity and ambiguity.
-   - Pluto concerns intensity, power and deep change.
-
-   Only explain planets that are actually important today.
-
-5. Briefly explain the aspect when useful.
-
-   For example:
-   - a conjunction combines and intensifies two influences;
-   - a trine tends to allow easier expression;
-   - a sextile tends to present a constructive opportunity;
-   - a square tends to create tension requiring active adjustment;
-   - an opposition tends to highlight competing needs or perspectives.
-
-   Do not include these definitions unless that aspect appears in today's
-   reading.
-
-6. When the source distinguishes a transiting planet from a natal planet or
-   point, explain the difference naturally.
-
-7. Do not invent placements, aspects, houses, signs, meanings or predictions
-   that are not supported by the source.
-
-LIFE-AREA SELECTION
-
-Do not default to:
-- career;
-- university;
-- applications;
-- productivity;
-- getting more work done.
-
-Let the astrology determine today's main focus.
-
-Possible areas include:
-- romantic relationships;
-- friendships;
-- family;
-- social connection;
-- emotional wellbeing;
-- mental wellbeing;
-- rest;
-- home and private life;
-- communication;
-- learning;
-- confidence;
-- identity;
-- self-expression;
-- creativity;
-- hobbies;
-- enjoyment;
-- money and values;
-- motivation;
-- exercise and physical drive;
-- career;
-- university;
-- practical responsibilities.
-
-If one area is clearly dominant, allow most of the reading to focus on that
-area.
-
-Do not mention unrelated life categories just to make the reading appear
-comprehensive.
-
-CALENDAR RULES
-
-The calendar is secondary context.
-
-Use it only after interpreting the astrology.
-
-- Mention an event only when today's astrology gives useful advice for how to
-  approach it.
-- Do not mention every event merely because it appears in the calendar.
-- Do not turn ordinary appointments into dramatic astrological predictions.
-- If an event has no meaningful connection to the strongest astrology, omit it.
-- If there are no events, simply give useful guidance for the open day.
-
-SPECIFICITY
-
-Advice should be concrete.
-
-Good examples:
-- have the conversation directly rather than rehearsing it repeatedly;
-- make time for a hobby if Venus or creative themes are particularly strong;
-- do not answer a difficult message while frustrated;
-- use a Mars influence for exercise or decisive action;
-- leave more recovery time if Saturn or emotionally demanding influences are
-  dominant;
-- approach a social event with curiosity rather than trying to control how it
-  goes.
-
-These are examples only. Use the actual horoscope.
-
-STYLE
-
-Use concise dot points.
-
-Write like a knowledgeable friend who is teaching the person how astrology
-works while also helping them use the reading practically.
-
-Be:
-- clear;
-- grounded;
-- natural;
-- specific;
-- relatively concise.
-
-Do not sound like:
-- a newspaper horoscope;
-- a motivational poster;
-- a generic AI summary;
-- an astrologer making guaranteed predictions.
-
-Treat astrology as reflective guidance rather than certainty.
-
-Avoid phrases such as:
-- trust the process;
-- embrace change;
-- protect your energy;
-- step into your power;
-- the universe is telling you;
-- stay positive;
-- balance is key;
-- navigate these energies.
-
-Do not invent:
-- arguments;
-- opportunities;
-- health problems;
-- deadlines;
-- financial outcomes;
-- romantic events;
-- job offers;
-- guaranteed outcomes.
-
-RETURN ONLY THIS FORMAT
-
-Morning — {target_label}
-
-Planetary picture
-• [Strongest transit or aspect. Explain what the relevant planets represent,
-  what the aspect means and how this combination affects the person today.]
-• [Second genuinely important influence, explained in the same concise way.]
-• [Third influence only if it adds meaningful information.]
-
-Main focus
-• [Identify the single life area or psychological theme most strongly
-  emphasised today and give practical guidance.]
-
-Your day
-• [One highly relevant action or approach based on today's astrology.]
-• [One calendar-specific point only if an actual event genuinely connects to
-  the astrology.]
-• [One additional point only if strongly useful.]
-
-Watch for
-• [The most relevant emotional reaction, communication habit, behavioural
-  pattern or decision to avoid today.]
-
-This month
-• [One genuine longer-running or slow-moving influence and what it means.]
-• [Second monthly theme only if genuinely supported.]
-• [Third point only if distinct and genuinely useful.]
-
-Keep the complete message between 120 and 190 words.
-
-Prefer fewer strong bullets over filling every section with weak material.
-
-Do not add:
-- emojis;
-- hashtags;
-- lucky numbers;
-- ratings;
-- disclaimers;
-- Markdown bold markers;
-- an introduction;
-- a conclusion.
+# House themes are guidance for interpretation, never evidence of a placement.
+HOUSE_AREAS = """
+1st: identity and self-presentation; 2nd: personal finances and values;
+3rd: communication and local life; 4th: home and family;
+5th: creativity, pleasure and dating; 6th: daily routines and health habits;
+7th: partnerships; 8th: shared money, trust and intimacy;
+9th: higher education, travel and beliefs; 10th: public role and career;
+11th: friends and communities; 12th: solitude and inner life.
 """.strip()
 
 
-# ---------------------------------------------------------
-# EVENING PROMPT
-# ---------------------------------------------------------
-
-def build_evening_prompt(
-    result: dict[str, Any],
-    events: list[dict[str, str]],
-    target_label: str,
-) -> str:
-    """
-    Build the preparation-only evening message.
-    """
-
-    personal_context = optional(
-        "PERSONAL_CONTEXT",
-        DEFAULT_PERSONAL_CONTEXT,
-    )
-
-    calendar_text = calendar_for_prompt(
-        events
-    )
-
-    astrology_text = astrology_for_prompt(
-        result
-    )
+def build_detailed_prompt(result: dict[str, Any], events: list[dict[str, str]], target_label: str, mode: str) -> str:
+    """Evidence-first planetary inventory, then a calendar-based plan."""
+    title = "Morning" if mode == "morning" else "Prepare for tomorrow"
+    day_word = "today" if mode == "morning" else "tomorrow"
+    astrology_text = astrology_for_prompt(result)
+    calendar_text = calendar_for_prompt(events)
+    personal_context = optional("PERSONAL_CONTEXT", DEFAULT_PERSONAL_CONTEXT)
 
     return f"""
-Prepare a private next-day preparation message.
+Prepare a highly specific personal astrology briefing for {day_word}.
+DATE: {target_label}, Melbourne, Australia.
 
-TOMORROW
-{target_label}, Melbourne, Australia.
-
-PERSONAL CONTEXT
+PERSONAL CONTEXT (never override the astrology with assumptions):
 {personal_context}
 
-TOMORROW'S CALENDAR
-{calendar_text}
-
-TOMORROW'S PERSONALISED ASTROLOGY JSON
+ASTROLOGY SOURCE JSON:
 {astrology_text}
 
-PURPOSE
+CALENDAR SOURCE (only use in the SECOND HALF):
+{calendar_text}
 
-This message is read at 8:30 pm.
+NON-NEGOTIABLE FACTUAL RULES
+- Use ONLY the astrology JSON for planet positions, signs, natal houses,
+  transits, aspects, retrogrades, ingress dates, and durations.
+- Inventory ALL distinct planetary movements, current placements and aspects
+  explicitly established by the JSON, including every supported planet.
+  Do not select only the top few. Avoid repeating duplicate entries.
+- A prose daily forecast is NOT a complete ephemeris. Do not infer missing
+  movements, aspects, exact degrees, dates or house placements from it.
+- Distinguish NATAL placements from CURRENT TRANSITING placements.
+- A planet in Aquarius does not automatically occupy the person's 1st house.
+  Never claim 'Pluto entered your 1st house in Aquarius' unless the source
+  actually verifies Pluto's transit into that person's 1st house and sign.
+- Only say 'entered' if the source establishes an actual sign/house ingress.
+  Otherwise say 'is in' or 'is transiting'.
+- The natal house MUST be verified for this person; if absent say
+  'house not provided'. Do not infer a house from a sign.
+- Report a duration, exact date, or peak only if evidenced in the JSON.
+  Otherwise say 'timing not provided'; do not guess days/weeks/months/years.
+- If no individual movements are provided, say 'Individual planetary
+  movements not supplied by the astrology source.' Do not invent a list.
+- The JSON may be truncated; never claim completeness beyond supplied data.
+- Never turn symbolic readings into certain events, health problems, money
+  results, personal conflicts or guaranteed outcomes.
 
-It must contain only practical preparation for tomorrow.
+FOR EACH DISTINCT SOURCED FACTOR
+- One concise bullet: Planet + actual movement/position/aspect, sign where
+  known, verified natal house or aspect target where known, and precisely ONE
+  plain-English sentence about how it may affect that area of life.
+- State house and timing as 'not provided' if absent.
+- Include the planet's proper area of influence, but let VERIFIED house
+  placement identify the life area. Do not default to career or romance.
+- No generalised paragraph of textbook astrology for each planet.
 
-Do not provide:
-- a general horoscope summary;
-- a monthly outlook;
-- a motivational speech;
-- a retrospective discussion.
+HOUSE REFERENCE (only use a house when actually supplied):
+{HOUSE_AREAS}
 
-RULES
+DOMINANCE AND HOW LONG
+- Identify strongest influences ONLY when the source offers a basis, such as
+  exactness of orb, multiple aspects, repeated emphasis or explicit priority.
+- Explain why they dominate, the actual houses/life areas affected and
+  evidenced peak/start/end dates or durations.
+- If comparative strength cannot be verified, say so plainly.
+- Give a specific action for a plausible difficulty and a specific way to
+  use an opportunity, but only where a sourced transit supports it.
 
-- Use only the strongest one to three influences for tomorrow.
-- Mention a transit or aspect only when it helps explain why a preparation
-  step is useful.
-- Calendar events matter only when they genuinely change what should be
-  prepared tonight.
-- Do not default to work or career.
-- If tomorrow's strongest theme concerns relationships, wellbeing, creativity,
-  communication, hobbies, motivation or another area, preparation should
-  reflect that.
-- If tomorrow has no calendar events, prepare the person for the strongest
-  astrological theme without inventing commitments.
+CALENDAR SEPARATION
+- Calendar must have NO influence on the planetary inventory, its dominant
+  ranking or interpretations in the FIRST HALF.
+- ONLY after 'Calendar and practical plan' may events appear.
+- For actual calendar events, mention event and time when available, connect
+  it to a previously stated transit ONLY if relevant, and prescribe a concrete
+  thing to prepare, say, decide or do.
+- If an event has no evidenced astrological link, offer practical planning
+  without attributing it to a planet.
+- Do not invent appointments or commitments. If empty, say
+  'No calendar events listed'.
 
-Do not invent:
-- deadlines;
-- events;
-- travel requirements;
-- people;
-- arguments;
-- health issues;
-- financial events;
-- guaranteed outcomes.
+RETURN EXACTLY THIS LAYOUT:
 
-Useful preparation may include:
-- organising something needed tomorrow;
-- deciding tomorrow's first priority;
-- writing down a thought before a communication-heavy day;
-- planning a difficult conversation;
-- setting a boundary;
-- making room for rest;
-- removing a distraction;
-- preparing for a social interaction;
-- setting aside time for creativity;
-- preparing for exercise;
-- delaying a reactive decision.
+{title} — {target_label}
 
-RETURN ONLY THIS FORMAT
+Planetary movements and transits
+• [One concise, specific bullet for EVERY distinct supported transit,
+  position, aspect, station or ingress; verified house and timing or explicitly
+  mark unknown; one sentence of interpretation.]
 
-Prepare for tomorrow — {target_label}
+What's dominant
+• [Strongest evidenced factor(s), reason, affected life areas and verified
+  timeframe, or explicitly explain what is not established.]
 
-• [Most useful concrete preparation step.]
-• [Second concrete preparation step.]
-• [Third step only if genuinely useful.]
-• [Fourth step only if strongly supported.]
+How to use it
+• Challenge: [A concrete, conditional step to handle a supported difficulty.]
+• Opportunity: [A concrete, conditional step to use a supported benefit.]
 
-Keep the message between 60 and 120 words.
+Calendar and practical plan
+• [Real events and times, paired with specific practical actions; only link
+  to astrology already established above when genuinely justified.]
 
-Every bullet must tell the person something they can actually do tonight.
-
-Do not add:
-- another heading;
-- paragraph commentary;
-- conclusion;
-- emoji;
-- hashtag;
-- rating;
-- disclaimer;
-- Markdown bold markers.
+Use concise dot points, direct British/Australian English and no AI jargon.
+No emojis, hashtags, hollow advice, introductions or conclusions.
+Do not use 'embrace the energy', 'lean into', 'step into your power',
+'trust the process', 'the universe wants', or similarly vague phrasing.
+Prioritise a complete factual inventory over an arbitrary word limit.
 """.strip()
 
 
-# ---------------------------------------------------------
-# PROMPT SELECTION
-# ---------------------------------------------------------
+def build_morning_prompt(result: dict[str, Any], events: list[dict[str, str]], target_label: str) -> str:
+    return build_detailed_prompt(result, events, target_label, "morning")
+
+
+def build_evening_prompt(result: dict[str, Any], events: list[dict[str, str]], target_label: str) -> str:
+    return build_detailed_prompt(result, events, target_label, "evening")
 
 def build_prompt(
     result: dict[str, Any],
@@ -1293,18 +1038,12 @@ def required_sections(
 ) -> tuple[str, ...]:
     """Return the headings required for each mode."""
 
-    if mode == "evening":
-        return (
-            "Prepare for tomorrow",
-        )
-
     return (
-        "Morning",
-        "Planetary picture",
-        "Main focus",
-        "Your day",
-        "Watch for",
-        "This month",
+        "Prepare for tomorrow" if mode == "evening" else "Morning",
+        "Planetary movements and transits",
+        "What's dominant",
+        "How to use it",
+        "Calendar and practical plan",
     )
 
 
@@ -1410,9 +1149,7 @@ def generate_reading(
 
             continue
 
-        return message[
-            :MAX_TELEGRAM_CHARS
-        ]
+        return message
 
     raise RuntimeError(
         "Gemini did not return "
@@ -1424,10 +1161,10 @@ def generate_reading(
 # TELEGRAM
 # ---------------------------------------------------------
 
-def send_telegram(
+def send_telegram_part(
     message: str,
 ) -> None:
-    """Send the message through Telegram."""
+    """Send one Telegram message."""
 
     response = requests.post(
         (
@@ -1469,6 +1206,21 @@ def send_telegram(
             f"Telegram rejected the message: "
             f"{description}"
         )
+
+
+def send_telegram(message: str) -> None:
+    """Deliver long inventories as multiple Telegram messages without truncating."""
+    remaining = message.strip()
+    while remaining:
+        if len(remaining) <= MAX_TELEGRAM_CHARS:
+            part, remaining = remaining, ""
+        else:
+            split_at = remaining.rfind("\n", 0, MAX_TELEGRAM_CHARS)
+            if split_at < MAX_TELEGRAM_CHARS // 2:
+                split_at = MAX_TELEGRAM_CHARS
+            part = remaining[:split_at]
+            remaining = remaining[split_at:].lstrip("\n")
+        send_telegram_part(part)
 
 
 def send_failure(
@@ -1662,3 +1414,5 @@ if __name__ == "__main__":
         sys.exit(
             1
         )
+
+
